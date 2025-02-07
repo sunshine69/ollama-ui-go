@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ask Ollama</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+        }
+        input[type="text"] {
+            margin-bottom: 10px;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            padding: 10px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        .result {
+            margin-top: 20px;
+            font-size: 1.2em;
+            color: #333;
+        }
+        .loading {
+            margin-top: 20px;
+            font-size: 1.2em;
+            color: #333;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Ask Ollama</h1>
+        <div class="result" id="result" style="max-height: 600px; overflow-y: auto;"></div>
+        <form id="askForm">
+            <select id="model_name">
+            </select>
+            <input type="text" id="question" placeholder="Enter your question here" required>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button type="submit" style="flex: 1;">Submit</button>
+                <button type="button" style="flex: 1;" onclick="newChat()">New Chat</button>
+            </div>
+        </form>
+        <div class="loading" id="loading" style="display: none;">Loading...</div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/showdown/1.9.1/showdown.min.js"></script>
+    <script>
+        var messages = [];
+        var converter = new showdown.Converter();
+        function newChat() {
+            messages = [];
+            document.getElementById('result').innerHTML = '';
+        }
+        document.addEventListener('DOMContentLoaded', function() {
+            fetch('/models')
+                .then(response => response.json())
+                .then(data => {
+                    const select = document.getElementById('model_name');
+                    data.models.forEach(model => {
+                        const option = document.createElement('option');
+                        option.value = model.name;
+                        option.textContent = model.name;
+                        select.appendChild(option);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error fetching models:', error);
+                    alert('An error occurred while fetching the models.' + error);
+                });
+        });
+        document.getElementById('askForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const model = document.getElementById('model_name').value;
+            const question = document.getElementById('question').value;
+            document.getElementById('loading').style.display = 'block';
+            const resultDiv = document.getElementById('result');
+            messages.push({role: "user", content: question});
+            fetch('/ask', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            // chat style (use /api/chat)
+            body: JSON.stringify({ model: model, messages: messages, stream: false })
+            // Generate style (use /api/generate)
+            // body: JSON.stringify({ model: model, prompt: question, stream: false })
+            })
+            .then(response => response.json())
+            .then(data => {
+            document.getElementById('loading').style.display = 'none';
+            if (data.error) {
+                alert(data.error);
+            } else {
+                obj = JSON.parse(data.response);
+                // Generate style
+                // const formattedResponse = obj.response.replace(/\n/g, '<br>');
+                // Chat style
+                messages.push({role: "assistant", content: obj.message.content});
+                // const formattedResponse = obj.message.content.replace(/\n/g, '<br>');
+                const htmlContent = converter.makeHtml(obj.message.content);
+                resultDiv.innerHTML += htmlContent + '<hr/>';
+                resultDiv.scrollTop = resultDiv.scrollHeight;
+            }
+            })
+            .catch(error => {
+            document.getElementById('loading').style.display = 'none';
+            console.error('Error:', error);
+            alert('An error occurred while submitting your question.');
+            });
+        });
+    </script>
+</body>
+</html>
