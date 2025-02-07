@@ -24,12 +24,13 @@ type OllamaRequest struct {
 }
 
 var (
-	ollamaURL             = os.Getenv("OLLAMA_URL")
-	ollamaAPIChatEndpoint = ollamaURL + "/api/chat"
-	ollamaTagEndpoint     = ollamaURL + "/api/tags"
+	ollamaURL             string
+	ollamaAPIChatEndpoint string
+	ollamaTagEndpoint     string
 )
 
 func init() {
+	ollamaURL = os.Getenv("OLLAMA_URL")
 	if ollamaURL == "" {
 		ollamaURL = "http://192.168.20.49:11434" // example
 		ollamaAPIChatEndpoint = ollamaURL + "/api/chat"
@@ -56,7 +57,7 @@ func main() {
 		if err != nil {
 			// Handle error
 		}
-		fmt.Println(string(jsonData))
+		// fmt.Println(string(jsonData))
 		if err := json.Unmarshal(jsonData, &ollamaRequest); err != nil {
 			fmt.Printf("[DEBUG] Error: %s\n", err.Error())
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
