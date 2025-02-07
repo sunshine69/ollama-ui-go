@@ -1,6 +1,8 @@
-module go-ollama-ui
+module github.com/sunshine69/ollama-ui-go
 
 go 1.23.5
+
+replace github.com/sunshine69/ollama-ui-go/lib => ./lib
 
 require github.com/gin-gonic/gin v1.10.0
 

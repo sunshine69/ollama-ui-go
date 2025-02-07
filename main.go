@@ -6,53 +6,26 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sunshine69/ollama-ui-go/lib"
 )
-
-type AIMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
-type OllamaRequest struct {
-	// Prompt   string      `json:"prompt"`
-	Model    string      `json:"model"`
-	Stream   bool        `json:"stream"`
-	Messages []AIMessage `json:"messages"`
-}
-
-var (
-	ollamaURL             string
-	ollamaAPIChatEndpoint string
-	ollamaTagEndpoint     string
-)
-
-func init() {
-	ollamaURL = os.Getenv("OLLAMA_URL")
-	if ollamaURL == "" {
-		ollamaURL = "http://192.168.20.49:11434" // example
-		ollamaAPIChatEndpoint = ollamaURL + "/api/chat"
-		ollamaTagEndpoint = ollamaURL + "/api/tags"
-	}
-}
 
 func main() {
 	r := gin.Default()
 
 	r.GET("/models", func(c *gin.Context) {
-		models, err := getOllamaModels()
+		models, err := lib.GetOllamaModels()
 		if err != nil {
 			println("[DEBUG] [ERROR]: " + err.Error())
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to call Ollama API"})
 			return
 		}
-		c.Data(http.StatusOK, "application/json", []byte(models))
+		c.Data(http.StatusOK, "application/json", models)
 	})
 
 	r.POST("/ask", func(c *gin.Context) {
-		var ollamaRequest OllamaRequest
+		var ollamaRequest lib.OllamaRequest
 		jsonData, err := io.ReadAll(c.Request.Body)
 		if err != nil {
 			// Handle error
@@ -70,61 +43,19 @@ func main() {
 			return
 		}
 		requestString := string(requestBody)
-		fmt.Println("[DEBUG] requestString " + requestString)
-		response, err := askOllamaAPI(requestString)
+		// fmt.Println("[DEBUG] requestString " + requestString)
+		response, err := lib.AskOllamaAPI(requestString)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to call Ollama API"})
 			return
 		}
-		fmt.Println("[DEBUG] AI response " + response)
-		c.JSON(http.StatusOK, gin.H{"response": response})
+		// fmt.Println("[DEBUG] AI response " + response)
+		c.Data(http.StatusOK, "application/json", response)
 	})
 	r.Static("static/", "static")
-	r.Run(":8080")
-}
-
-func askOllamaAPI(question string) (string, error) {
-	// Create a POST request to the Ollama API
-	req, err := http.NewRequest("POST", ollamaAPIChatEndpoint, strings.NewReader(question))
-	if err != nil {
-		return "", err
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8081"
 	}
-	req.Header.Set("Content-Type", "application/json")
-
-	// Send the request and get the response
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	// Read the response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	// Return the response as a string
-	return string(body), nil
-}
-
-func getOllamaModels() (string, error) {
-	req, err := http.NewRequest("GET", ollamaTagEndpoint, nil)
-	if err != nil {
-		return "", err
-	}
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	return string(body), nil
+	r.Run(":8081")
 }

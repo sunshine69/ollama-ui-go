@@ -37,7 +37,7 @@
         }
         .result {
             margin-top: 20px;
-            font-size: 1.2em;
+            /* font-size: 1.2em; */
             color: #333;
         }
         .loading {
@@ -106,27 +106,19 @@
             headers: {
                 'Content-Type': 'application/json'
             },
-            // chat style (use /api/chat)
             body: JSON.stringify({ model: model, messages: messages, stream: false })
-            // Generate style (use /api/generate)
-            // body: JSON.stringify({ model: model, prompt: question, stream: false })
             })
             .then(response => response.json())
             .then(data => {
-            document.getElementById('loading').style.display = 'none';
-            if (data.error) {
-                alert(data.error);
-            } else {
-                obj = JSON.parse(data.response);
-                // Generate style
-                // const formattedResponse = obj.response.replace(/\n/g, '<br>');
-                // Chat style
-                messages.push({role: "assistant", content: obj.message.content});
-                // const formattedResponse = obj.message.content.replace(/\n/g, '<br>');
-                const htmlContent = converter.makeHtml(obj.message.content);
-                resultDiv.innerHTML += htmlContent + '<hr/>';
-                resultDiv.scrollTop = resultDiv.scrollHeight;
-            }
+                document.getElementById('loading').style.display = 'none';
+                if (data.error) {
+                    alert(data.error);
+                } else {
+                    messages.push({role: "assistant", content: data.message.content});
+                    const htmlContent = converter.makeHtml(data.message.content);
+                    resultDiv.innerHTML += htmlContent + '<hr/>';
+                    resultDiv.scrollTop = resultDiv.scrollHeight;
+                }
             })
             .catch(error => {
             document.getElementById('loading').style.display = 'none';
