@@ -18,6 +18,8 @@ type OllamaRequest struct {
 	Model    string      `json:"model"`
 	Stream   bool        `json:"stream"`
 	Messages []AIMessage `json:"messages"`
+	Images   []string    `json:"images"`
+	Format   string      `json:"format"`
 }
 
 var (

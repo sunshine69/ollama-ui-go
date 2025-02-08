@@ -54,13 +54,13 @@ func main() {
 			return
 		}
 		requestString := string(requestBody)
-		fmt.Println("[DEBUG] requestString " + requestString)
+		// fmt.Println("[DEBUG] requestString " + requestString)
 		response, err := lib.AskOllamaAPI(requestString)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to call Ollama API"})
 			return
 		}
-		fmt.Println("[DEBUG] AI response " + string(response))
+		// fmt.Println("[DEBUG] AI response " + string(response))
 		c.Data(http.StatusOK, "application/json", response)
 	})
 	r.Static("static/", "static")

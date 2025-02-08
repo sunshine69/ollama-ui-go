@@ -60,13 +60,19 @@
         <div>
             <input type="checkbox" id="rawDisplay" onclick="toggleRawDisplay()">
             <label for="rawDisplay">Raw Display</label>
-            <a href="#" style="float: right;" onclick="showModelInfo();">Show model information</a>
+            <a href="#" style="float: right; margin-left: 10px;" onclick="showInputBox();" title="Set for format field for structure output. See ollama API doc for more info">Format(json)</a>
+            <textarea id="textInputBox" style="display: none; width: 50%; height: 100px;" onblur="setTextVar(this.value)"></textarea>
+            <input type="file" id="fileTextInput" accept=".txt" style="display: none;" onchange="handleTextFileSelect(event)">
+            <a href="#" style="float: right; margin-left: 10px;" onclick="document.getElementById('fileTextInput').click();" title="Upload a text file, it will insert it into the question">File(Text)</a>
+            <input type="file" id="fileInput" accept="image/*" style="display: none;" onchange="handleFileSelect(event)" title="Upload images, it will be uploaded to the AI">
+            <a href="#" style="float: right; margin-left: 10px;" onclick="document.getElementById('fileInput').click();">Files(images)</a>
+            <a href="#" style="float: right;" onclick="showModelInfo();">Model info</a>
         </div>
         <div class="result" id="result" style="max-height: 600px; overflow-y: auto;"></div>
         <form id="askForm">
             <select id="model_name">
             </select>
-            <input type="text" id="question" placeholder="Enter your question here" required>
+            <textarea id="question" placeholder="Enter your question here" required rows="4" style="resize: vertical;"></textarea>
             <div style="display: flex; gap: 10px; justify-content: center;">
                 <button type="submit" style="flex: 1;">Submit</button>
                 <button type="button" style="flex: 1;" onclick="newChat()">New Chat</button>
@@ -77,6 +83,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/showdown/1.9.1/showdown.min.js"></script>
     <script>
         var messages = [];
+        var imageFileContent = [];
+        var formatField = "";
         var converter = new showdown.Converter();
         var enableMarkdownConversion = true;
         function toggleRawDisplay() {
@@ -84,6 +92,36 @@
                 enableMarkdownConversion = false;
             } else {
                 enableMarkdownConversion = true;
+            }
+        }
+        function showInputBox() {
+            document.getElementById('textInputBox').style.display = 'block';
+        }
+        function setTextVar(value) {
+            formatField = value;
+            console.log('Text input:', textVar);
+            document.getElementById('textInputBox').style.display = 'none';
+        }
+        function handleTextFileSelect(event) {
+            const file = event.target.files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const content = e.target.result;
+                document.getElementById('question').value = content;
+            };
+            reader.readAsText(file);
+        }
+        function handleFileSelect(event) {
+            const files = event.target.files;
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const content = e.target.result;
+                    const base64Content = btoa(String.fromCharCode(...new Uint8Array(content)));
+                    imageFileContent.push(base64Content);
+                };
+                reader.readAsArrayBuffer(file);
             }
         }
         function showModelInfo() {
@@ -127,12 +165,19 @@
             document.getElementById('loading').style.display = 'block';
             const resultDiv = document.getElementById('result');
             messages.push({role: "user", content: question});
+            var bodyPayload = { model: model, messages: messages, stream: false };
+            if (imageFileContent.length > 0) {
+                bodyPayload['images'] = imageFileContent;
+            }
+            if (formatField.length > 0) {
+                bodyPayload['format'] = formatField;
+            }
             fetch('/ask', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ model: model, messages: messages, stream: false })
+            body: JSON.stringify(bodyPayload)
             })
             .then(response => response.json())
             .then(data => {
