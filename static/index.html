@@ -57,6 +57,11 @@
 <body>
     <div class="container">
         <h1>Ask Ollama</h1>
+        <div>
+            <input type="checkbox" id="rawDisplay" onclick="toggleRawDisplay()">
+            <label for="rawDisplay">Raw Display</label>
+            <a href="#" style="float: right;" onclick="showModelInfo();">Show model information</a>
+        </div>
         <div class="result" id="result" style="max-height: 600px; overflow-y: auto;"></div>
         <form id="askForm">
             <select id="model_name">
@@ -73,6 +78,27 @@
     <script>
         var messages = [];
         var converter = new showdown.Converter();
+        var enableMarkdownConversion = true;
+        function toggleRawDisplay() {
+            if (enableMarkdownConversion) {
+                enableMarkdownConversion = false;
+            } else {
+                enableMarkdownConversion = true;
+            }
+        }
+        function showModelInfo() {
+            const model = document.getElementById('model_name').value;
+            fetch('/model/' + encodeURIComponent(model))
+                .then(response => response.json())
+                .then(data => {
+                    alert(JSON.stringify(data.model_info, null, 2) + '\n\nDetails: ' + JSON.stringify(data.details, null, 2) + '\n\nParameters: ' + JSON.stringify(data.parameters, null, 2));
+                })
+                .catch(error => {
+                    console.error('Error fetching model info:', error);
+                    alert('An error occurred while fetching the model information.');
+                });
+        };
+
         function newChat() {
             messages = [];
             document.getElementById('result').innerHTML = '';
@@ -115,7 +141,12 @@
                     alert(data.error);
                 } else {
                     messages.push({role: "assistant", content: data.message.content});
-                    const htmlContent = converter.makeHtml(data.message.content);
+                    var htmlContent = "";
+                    if (enableMarkdownConversion) {
+                        htmlContent = converter.makeHtml(data.message.content);
+                    } else {
+                        htmlContent = "<pre>" + data.message.content + "</pre>";
+                    }
                     resultDiv.innerHTML += htmlContent + '<hr/>';
                     resultDiv.scrollTop = resultDiv.scrollHeight;
                 }

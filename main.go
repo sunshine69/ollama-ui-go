@@ -14,6 +14,17 @@ import (
 func main() {
 	r := gin.Default()
 
+	r.GET("/model/:modelname", func(c *gin.Context) {
+		modelName := c.Param("modelname")
+		modelInfo, err := lib.GetOllamaModel(modelName)
+		if err != nil {
+			println("[DEBUG] [ERROR]: " + err.Error())
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch model information"})
+			return
+		}
+		c.Data(http.StatusOK, "application/json", modelInfo)
+	})
+
 	r.GET("/models", func(c *gin.Context) {
 		models, err := lib.GetOllamaModels()
 		if err != nil {
@@ -43,13 +54,13 @@ func main() {
 			return
 		}
 		requestString := string(requestBody)
-		// fmt.Println("[DEBUG] requestString " + requestString)
+		fmt.Println("[DEBUG] requestString " + requestString)
 		response, err := lib.AskOllamaAPI(requestString)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to call Ollama API"})
 			return
 		}
-		// fmt.Println("[DEBUG] AI response " + response)
+		fmt.Println("[DEBUG] AI response " + string(response))
 		c.Data(http.StatusOK, "application/json", response)
 	})
 	r.Static("static/", "static")

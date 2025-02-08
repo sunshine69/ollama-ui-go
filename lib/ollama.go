@@ -1,6 +1,7 @@
 package lib
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -71,6 +72,29 @@ func GetOllamaModels() ([]byte, error) {
 	if err != nil {
 		return []byte(""), err
 	}
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return []byte(""), err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return []byte(""), err
+	}
+	return body, nil
+}
+
+func GetOllamaModel(modelName string) ([]byte, error) {
+	fmt.Println("[DEBUG] modelName: " + modelName)
+	payload := fmt.Sprintf(`{"model": "%s"}`, modelName)
+	req, err := http.NewRequest("POST", OllamaURL+"/api/show", strings.NewReader(payload))
+	if err != nil {
+		return []byte(""), err
+	}
+	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
