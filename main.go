@@ -11,8 +11,44 @@ import (
 	"github.com/sunshine69/ollama-ui-go/lib"
 )
 
+var AuthFile = "auth.txt"
+
 func main() {
 	r := gin.Default()
+
+	AcceptedUsers := map[string]string{}
+
+	if err := json.Unmarshal([]byte(os.Getenv("ACCEPTED_USERS")), &AcceptedUsers); err != nil {
+		secret, _ := lib.GenerateSecureRandomPassword(16)
+		AcceptedUsers = map[string]string{"admin": secret}
+		fmt.Println("[INFO] No ACCEPTED_USERS environment variable found. Genrate default credentials. User: admin, jwtsecret: " + secret)
+	}
+
+	// Middleware for basic authentication
+	r.Use(func(c *gin.Context) {
+		doAbort := func() {
+			c.Header("WWW-Authenticate", `Basic realm="Restricted"`)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			c.Abort()
+		}
+		username, password, hasAuth := c.Request.BasicAuth()
+		if !hasAuth {
+			doAbort()
+			return
+		}
+		// Check if provided credentials match the stored ones
+		if secret, ok := AcceptedUsers[username]; ok {
+			sub, err := lib.ValidateJWT(password, secret)
+			if err != nil || username != sub {
+				doAbort()
+				return
+			}
+		} else {
+			doAbort()
+			return
+		}
+		c.Next()
+	})
 
 	r.GET("/model/:modelname", func(c *gin.Context) {
 		modelName := c.Param("modelname")

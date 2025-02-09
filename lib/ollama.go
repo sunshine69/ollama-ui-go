@@ -1,11 +1,14 @@
 package lib
 
 import (
+	"crypto/rand"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"strings"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type AIMessage struct {
@@ -110,4 +113,44 @@ func GetOllamaModel(modelName string) ([]byte, error) {
 		return []byte(""), err
 	}
 	return body, nil
+}
+
+func GenerateSecureRandomPassword(length int) (string, error) {
+	if length < 12 {
+		return "", fmt.Errorf("password length must be at least 12 characters")
+	}
+
+	const lettersAndDigits = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%&*"
+	password := make([]byte, length)
+
+	_, err := rand.Read(password)
+	if err != nil {
+		return "", fmt.Errorf("error generating password: %v", err)
+	}
+
+	for i := range password {
+		password[i] = lettersAndDigits[int(password[i])%len(lettersAndDigits)]
+	}
+
+	return string(password), nil
+}
+
+func ValidateJWT(jwtToken, storedPasswordHash string) (string, error) {
+	token, err := jwt.Parse(jwtToken, func(token *jwt.Token) (interface{}, error) {
+		// Validate the algorithm
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		// Return the key for validation
+		return []byte(storedPasswordHash), nil
+	})
+
+	if err != nil {
+		return "", err
+	}
+
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		return claims["sub"].(string), nil
+	}
+	return "", fmt.Errorf("Invalid password")
 }
