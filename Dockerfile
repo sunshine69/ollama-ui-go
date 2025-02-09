@@ -9,7 +9,7 @@ ADD . /app/
 RUN mkdir -p /etc/ssl/certs ; wget 'https://raw.githubusercontent.com/sunshine69/webnote/refs/heads/main/ca-certificates.crt' -O /etc/ssl/certs/ca-certificates.crt
 
 WORKDIR /app
-ENV CGO_ENABLED=1 PATH=/usr/local/go/bin:/opt/go/bin:/usr/bin:/usr/sbin:/bin:/sbin
+ENV CGO_ENABLED=0 PATH=/usr/local/go/bin:/opt/go/bin:/usr/bin:/usr/sbin:/bin:/sbin
 
 ARG APP_VERSION
 RUN go build -trimpath -ldflags="-X main.version=v1.0 -extldflags=-static -w -s" --tags "osusergo,netgo,sqlite_stat4,sqlite_foreign_keys,sqlite_json"
@@ -22,5 +22,7 @@ COPY --from=BUILD_BASE /app/ollama-ui-go /ollama-ui-go
 COPY --from=BUILD_BASE /imagetmp /tmp
 COPY --from=BUILD_BASE /app/static /static
 ENV TZ=Australia/Brisbane
-EXPOSE 80
+ARG PORT=8081
+ENV PORT=$PORT
+EXPOSE $PORT
 ENTRYPOINT [ "/ollama-ui-go" ]
