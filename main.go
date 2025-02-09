@@ -12,6 +12,9 @@ import (
 )
 
 func main() {
+	// deal with some LB does not support rewrite. There wont be any slash at the end of the path if it is not empty string
+	path_base := os.Getenv("PATH_BASE")
+
 	r := gin.Default()
 
 	AcceptedUsers := map[string]string{}
@@ -49,7 +52,7 @@ func main() {
 		c.Next()
 	})
 
-	r.GET("/model/:modelname", func(c *gin.Context) {
+	r.GET(path_base+"/ollama/model/:modelname", func(c *gin.Context) {
 		modelName := c.Param("modelname")
 		modelInfo, err := lib.GetOllamaModel(modelName)
 		if err != nil {
@@ -60,7 +63,7 @@ func main() {
 		c.Data(http.StatusOK, "application/json", modelInfo)
 	})
 
-	r.GET("/models", func(c *gin.Context) {
+	r.GET(path_base+"/ollama/models", func(c *gin.Context) {
 		models, err := lib.GetOllamaModels()
 		if err != nil {
 			println("[DEBUG] [ERROR]: " + err.Error())
@@ -70,7 +73,7 @@ func main() {
 		c.Data(http.StatusOK, "application/json", models)
 	})
 
-	r.POST("/ask", func(c *gin.Context) {
+	r.POST(path_base+"/ollama/ask", func(c *gin.Context) {
 		var ollamaRequest lib.OllamaRequest
 		jsonData, err := io.ReadAll(c.Request.Body)
 		if err != nil {
@@ -98,7 +101,7 @@ func main() {
 		// fmt.Println("[DEBUG] AI response " + string(response))
 		c.Data(http.StatusOK, "application/json", response)
 	})
-	r.Static("static/", "static")
+	r.Static(path_base+"/static", "static")
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8081"

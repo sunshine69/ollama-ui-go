@@ -5,6 +5,7 @@ go 1.23.5
 replace github.com/sunshine69/ollama-ui-go/lib => ./lib
 
 require (
+	github.com/gin-gonic/contrib v0.0.0-20250113154928-93b827325fec
 	github.com/gin-gonic/gin v1.10.0
 	github.com/golang-jwt/jwt/v5 v5.2.1
 )
