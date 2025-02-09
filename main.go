@@ -76,7 +76,7 @@ func main() {
 		if err != nil {
 			// Handle error
 		}
-		// fmt.Println(string(jsonData))
+		fmt.Println(string(jsonData))
 		if err := json.Unmarshal(jsonData, &ollamaRequest); err != nil {
 			fmt.Printf("[DEBUG] Error: %s\n", err.Error())
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})

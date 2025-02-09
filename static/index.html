@@ -60,6 +60,8 @@
         <div>
             <input type="checkbox" id="rawDisplay" onclick="toggleRawDisplay()">
             <label for="rawDisplay">Raw Display</label>
+            <a href="#" style="float: right; margin-left: 10px;" onclick="showOptionsBox();" title="Set options field. See ollama API doc for more info">Options(json)</a>
+            <textarea id="textOptionsBox" style="display: none; width: 50%; height: 100px;" onblur="setOptionsVar(this.value)"></textarea>
             <a href="#" style="float: right; margin-left: 10px;" onclick="showInputBox();" title="Set for format field for structure output. See ollama API doc for more info">Format(json)</a>
             <textarea id="textInputBox" style="display: none; width: 50%; height: 100px;" onblur="setTextVar(this.value)"></textarea>
             <input type="file" id="fileTextInput" accept=".txt" style="display: none;" onchange="handleTextFileSelect(event)">
@@ -85,6 +87,7 @@
         var messages = [];
         var imageFileContent = [];
         var formatField = "";
+        var optionsField = "";
         var converter = new showdown.Converter();
         var enableMarkdownConversion = true;
         function toggleRawDisplay() {
@@ -94,12 +97,18 @@
                 enableMarkdownConversion = true;
             }
         }
+        function showOptionsBox() {
+            document.getElementById('textOptionsBox').style.display = 'block';
+        }
+        function setOptionsVar(value) {
+            optionsField = value;
+            document.getElementById('textOptionsBox').style.display = 'none';
+        }
         function showInputBox() {
             document.getElementById('textInputBox').style.display = 'block';
         }
         function setTextVar(value) {
             formatField = value;
-            console.log('Text input:', textVar);
             document.getElementById('textInputBox').style.display = 'none';
         }
         function handleTextFileSelect(event) {
@@ -170,7 +179,10 @@
                 bodyPayload['images'] = imageFileContent;
             }
             if (formatField.length > 0) {
-                bodyPayload['format'] = formatField;
+                bodyPayload['format'] = JSON.parse(formatField);
+            }
+            if (optionsField.length > 0) {
+                bodyPayload['options'] = JSON.parse(optionsField);
             }
             fetch('/ask', {
             method: 'POST',
