@@ -19,7 +19,7 @@ func main() {
 	AcceptedUsers := map[string]string{}
 
 	if err := json.Unmarshal([]byte(os.Getenv("ACCEPTED_USERS")), &AcceptedUsers); err != nil {
-		secret, _ := lib.GenerateSecureRandomPassword(16)
+		secret, _ := lib.GenerateSecureRandomPassword(64)
 		AcceptedUsers = map[string]string{"admin": secret}
 		fmt.Printf(`[INFO] No ACCEPTED_USERS environment variable found. Generate default credentials. User: admin, jwtsecret: %s.`, secret)
 		fmt.Printf(`[INFO] If you want to set your own then set env var 'ACCEPTED_USERS' with a json string in the format '{"your-user-name": "your-jwt-secret"}'. To login provide the username and the jwt token generated using the secret and the 'sub' field must be set to the username.`)
