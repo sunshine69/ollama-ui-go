@@ -6,18 +6,15 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 
-	"github.com/gin-gonic/gin"
 	"github.com/sunshine69/ollama-ui-go/lib"
 )
 
+var AcceptedUsers = map[string]string{}
+
 func main() {
-	// deal with some LB does not support rewrite. There wont be any slash at the end of the path if it is not empty string
 	path_base := os.Getenv("PATH_BASE")
-
-	r := gin.Default()
-
-	AcceptedUsers := map[string]string{}
 
 	if err := json.Unmarshal([]byte(os.Getenv("ACCEPTED_USERS")), &AcceptedUsers); err != nil {
 		secret, _ := lib.GenerateSecureRandomPassword(64)
@@ -26,85 +23,101 @@ func main() {
 		fmt.Println(`[INFO] If you want to set your own then set env var 'ACCEPTED_USERS' with a json string in the format '{"your-user-name": "your-jwt-secret"}'. To login provide the username and the jwt token generated using the secret and the 'sub' field must be set to the username.`)
 	}
 
-	// Middleware for basic authentication
-	r.Use(func(c *gin.Context) {
-		doAbort := func() {
-			c.Header("WWW-Authenticate", `Basic realm="Restricted"`)
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-			c.Abort()
-		}
-		username, password, hasAuth := c.Request.BasicAuth()
-		if !hasAuth {
-			doAbort()
-			return
-		}
-		// Check if provided credentials match the stored ones
-		if secret, ok := AcceptedUsers[username]; ok {
-			sub, err := lib.ValidateJWT(password, secret)
-			if err != nil || username != sub {
-				doAbort()
-				return
-			}
-		} else {
-			doAbort()
-			return
-		}
-		c.Next()
-	})
-
-	r.GET(path_base+"/ollama/model/:modelname", func(c *gin.Context) {
-		modelName := c.Param("modelname")
+	http.HandleFunc(path_base+"/ollama/model/", func(w http.ResponseWriter, r *http.Request) {
+		modelName := r.URL.Path[len(path_base+"/ollama/model/"):]
 		modelInfo, err := lib.GetOllamaModel(modelName)
 		if err != nil {
-			println("[DEBUG] [ERROR]: " + err.Error())
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch model information"})
+			http.Error(w, "Failed to fetch model information", http.StatusInternalServerError)
 			return
 		}
-		c.Data(http.StatusOK, "application/json", modelInfo)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(modelInfo)
 	})
 
-	r.GET(path_base+"/ollama/models", func(c *gin.Context) {
+	http.HandleFunc(path_base+"/ollama/models", func(w http.ResponseWriter, r *http.Request) {
+
 		models, err := lib.GetOllamaModels()
 		if err != nil {
-			println("[DEBUG] [ERROR]: " + err.Error())
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to call Ollama API"})
+			http.Error(w, "Failed to call Ollama API", http.StatusInternalServerError)
 			return
 		}
-		c.Data(http.StatusOK, "application/json", models)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(models)
 	})
 
-	r.POST(path_base+"/ollama/ask", func(c *gin.Context) {
+	http.HandleFunc(path_base+"/ollama/ask", func(w http.ResponseWriter, r *http.Request) {
+
 		var ollamaRequest lib.OllamaRequest
-		jsonData, err := io.ReadAll(c.Request.Body)
+		jsonData, err := io.ReadAll(r.Body)
 		if err != nil {
-			// Handle error
+			http.Error(w, "Failed to read request body", http.StatusBadRequest)
+			return
 		}
 		fmt.Println(string(jsonData))
 		if err := json.Unmarshal(jsonData, &ollamaRequest); err != nil {
-			fmt.Printf("[DEBUG] Error: %s\n", err.Error())
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+			http.Error(w, "Invalid request payload", http.StatusBadRequest)
 			return
 		}
 
 		requestBody, err := json.Marshal(ollamaRequest)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to marshal request"})
+			http.Error(w, "Failed to marshal request", http.StatusInternalServerError)
 			return
 		}
 		requestString := string(requestBody)
-		// fmt.Println("[DEBUG] requestString " + requestString)
 		response, err := lib.AskOllamaAPI(requestString)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to call Ollama API"})
+			http.Error(w, "Failed to call Ollama API", http.StatusInternalServerError)
 			return
 		}
-		// fmt.Println("[DEBUG] AI response " + string(response))
-		c.Data(http.StatusOK, "application/json", response)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(response)
 	})
-	r.Static(path_base+"/static", "static")
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" || !strings.HasPrefix(r.URL.Path, path_base+"/ollama") {
+			http.StripPrefix("/", http.FileServer(http.Dir("static"))).ServeHTTP(w, r)
+		} else {
+			http.NotFound(w, r)
+		}
+	})
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8081"
 	}
-	r.Run(":8081")
+	http.ListenAndServe(":"+port, isAuthorized(http.DefaultServeMux))
+}
+
+func basicAuth(w http.ResponseWriter, r *http.Request) bool {
+	username, password, ok := r.BasicAuth()
+	if !ok {
+		w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return false
+	}
+	if secret, ok := AcceptedUsers[username]; ok {
+		sub, err := lib.ValidateJWT(password, secret)
+		if err != nil || username != sub {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return false
+		}
+	} else {
+		w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return false
+	}
+	return true
+}
+
+func isAuthorized(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if basicAuth(w, r) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	})
 }

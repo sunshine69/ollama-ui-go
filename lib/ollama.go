@@ -37,7 +37,7 @@ func init() {
 		OllamaURL = os.Getenv("OLLAMA_URL")
 	}
 	if OllamaURL == "" {
-		OllamaURL = "http://192.168.20.49:11434" // example
+		OllamaURL = "http://localhost:11434" // example
 	}
 	parseOllamaEndpoint()
 }
