@@ -11,8 +11,6 @@ import (
 	"github.com/sunshine69/ollama-ui-go/lib"
 )
 
-var AuthFile = "auth.txt"
-
 func main() {
 	r := gin.Default()
 
