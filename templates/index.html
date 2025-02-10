@@ -135,7 +135,7 @@
         }
         function showModelInfo() {
             const model = document.getElementById('model_name').value;
-            fetch('/ollama/model/' + encodeURIComponent(model))
+            fetch('{{.path_base}}/ollama/model/' + encodeURIComponent(model))
                 .then(response => response.json())
                 .then(data => {
                     alert(JSON.stringify(data.model_info, null, 2) + '\n\nDetails: ' + JSON.stringify(data.details, null, 2) + '\n\nParameters: ' + JSON.stringify(data.parameters, null, 2));
@@ -151,7 +151,7 @@
             document.getElementById('result').innerHTML = '';
         }
         document.addEventListener('DOMContentLoaded', function() {
-            fetch('/ollama/models')
+            fetch('{{.path_base}}/ollama/models')
                 .then(response => response.json())
                 .then(data => {
                     const select = document.getElementById('model_name');
@@ -184,7 +184,7 @@
             if (optionsField.length > 0) {
                 bodyPayload['options'] = JSON.parse(optionsField);
             }
-            fetch('/ollama/ask', {
+            fetch('{{.path_base}}/ollama/ask', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'

@@ -3,11 +3,15 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
-	"strings"
+	"path/filepath"
 
+	// To bundle assets first build the binary - then get into this dir (where the go file has the rice findbox command) and run 'rice append --exec <path-to-bin>
+	rice "github.com/GeertJohan/go.rice"
 	"github.com/sunshine69/ollama-ui-go/lib"
 )
 
@@ -74,9 +78,27 @@ func main() {
 		w.Write(response)
 	})
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/" || !strings.HasPrefix(r.URL.Path, path_base+"/ollama") {
-			http.StripPrefix("/", http.FileServer(http.Dir("static"))).ServeHTTP(w, r)
+	// http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	// 	if r.URL.Path == "/" || !strings.HasPrefix(r.URL.Path, path_base+"/ollama") {
+	// 		http.StripPrefix("/", http.FileServer(rice.MustFindBox("static").HTTPBox())).ServeHTTP(w, r)
+	// 	} else {
+	// 		http.NotFound(w, r)
+	// 	}
+	// })
+	t := template.New("tmpl")
+	templateBox := rice.MustFindBox("templates")
+	templateBox.Walk("/", func(path string, info fs.FileInfo, err error) error {
+		fmt.Println(path)
+		if info.IsDir() {
+			return nil
+		}
+		fname := filepath.Base(path)
+		t = template.Must(t.New(fname).Parse(templateBox.MustString(fname)))
+		return nil
+	})
+	http.HandleFunc(path_base+"/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == path_base+"/" {
+			t.ExecuteTemplate(w, "index.html", map[string]any{"path_base": path_base})
 		} else {
 			http.NotFound(w, r)
 		}
