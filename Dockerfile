@@ -20,7 +20,6 @@ FROM scratch
 COPY --from=BUILD_BASE /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=BUILD_BASE /app/ollama-ui-go /ollama-ui-go
 COPY --from=BUILD_BASE /imagetmp /tmp
-COPY --from=BUILD_BASE /app/static /static
 ENV TZ=Australia/Brisbane
 ARG PORT=8081
 ENV PORT=$PORT
