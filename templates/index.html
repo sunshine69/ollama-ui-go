@@ -37,7 +37,6 @@
         }
         .result {
             margin-top: 20px;
-            /* font-size: 1.2em; */
             color: #333;
         }
         .loading {
@@ -90,27 +89,31 @@
         var optionsField = "";
         var converter = new showdown.Converter();
         var enableMarkdownConversion = true;
+        var loadingInterval;
+        var loadingStartTime;
+
         function toggleRawDisplay() {
-            if (enableMarkdownConversion) {
-                enableMarkdownConversion = false;
-            } else {
-                enableMarkdownConversion = true;
-            }
+            enableMarkdownConversion = !enableMarkdownConversion;
         }
+
         function showOptionsBox() {
             document.getElementById('textOptionsBox').style.display = 'block';
         }
+
         function setOptionsVar(value) {
             optionsField = value;
             document.getElementById('textOptionsBox').style.display = 'none';
         }
+
         function showInputBox() {
             document.getElementById('textInputBox').style.display = 'block';
         }
+
         function setTextVar(value) {
             formatField = value;
             document.getElementById('textInputBox').style.display = 'none';
         }
+
         function handleTextFileSelect(event) {
             const file = event.target.files[0];
             const reader = new FileReader();
@@ -120,6 +123,7 @@
             };
             reader.readAsText(file);
         }
+
         function handleFileSelect(event) {
             const files = event.target.files;
             for (let i = 0; i < files.length; i++) {
@@ -133,6 +137,7 @@
                 reader.readAsArrayBuffer(file);
             }
         }
+
         function showModelInfo() {
             const model = document.getElementById('model_name').value;
             fetch('{{.path_base}}/ollama/model/' + encodeURIComponent(model))
@@ -144,12 +149,13 @@
                     console.error('Error fetching model info:', error);
                     alert('An error occurred while fetching the model information.');
                 });
-        };
+        }
 
         function newChat() {
             messages = [];
             document.getElementById('result').innerHTML = '';
         }
+
         document.addEventListener('DOMContentLoaded', function() {
             fetch('{{.path_base}}/ollama/models')
                 .then(response => response.json())
@@ -167,11 +173,18 @@
                     alert('An error occurred while fetching the models.' + error);
                 });
         });
+        var elapsedSeconds = 0;
         document.getElementById('askForm').addEventListener('submit', function(event) {
             event.preventDefault();
             const model = document.getElementById('model_name').value;
             const question = document.getElementById('question').value;
             document.getElementById('loading').style.display = 'block';
+            loadingStartTime = Date.now();
+            loadingInterval = setInterval(function() {
+                elapsedSeconds = Math.floor((Date.now() - loadingStartTime) / 1000);
+                document.getElementById('loading').textContent = 'Loading... ' + elapsedSeconds + 's';
+            }, 1000);
+
             const resultDiv = document.getElementById('result');
             messages.push({role: "user", content: question});
             var bodyPayload = { model: model, messages: messages, stream: false };
@@ -185,14 +198,15 @@
                 bodyPayload['options'] = JSON.parse(optionsField);
             }
             fetch('{{.path_base}}/ollama/ask', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(bodyPayload)
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(bodyPayload)
             })
             .then(response => response.json())
             .then(data => {
+                clearInterval(loadingInterval);
                 document.getElementById('loading').style.display = 'none';
                 if (data.error) {
                     alert(data.error);
@@ -204,14 +218,16 @@
                     } else {
                         htmlContent = "<pre>" + data.message.content + "</pre>";
                     }
+                    htmlContent = htmlContent + "<br><br>"+model+"took " + elapsedSeconds + "s to answer</b>";
                     resultDiv.innerHTML += htmlContent + '<hr/>';
                     resultDiv.scrollTop = resultDiv.scrollHeight;
                 }
             })
             .catch(error => {
-            document.getElementById('loading').style.display = 'none';
-            console.error('Error:', error);
-            alert('An error occurred while submitting your question.');
+                clearInterval(loadingInterval);
+                document.getElementById('loading').style.display = 'none';
+                console.error('Error:', error);
+                alert('An error occurred while submitting your question.');
             });
         });
     </script>
