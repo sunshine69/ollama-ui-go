@@ -87,6 +87,53 @@
         var imageFileContent = [];
         var formatField = "";
         var optionsField = "";
+        // Load saved settings from localStorage
+        document.addEventListener('DOMContentLoaded', function() {
+            const savedSettings = localStorage.getItem('ollamaSettings');
+            if (savedSettings) {
+            const settings = JSON.parse(savedSettings);
+            if (settings.formatField) {
+                formatField = settings.formatField;
+                document.getElementById('textInputBox').value = settings.formatField;
+            }
+            if (settings.optionsField) {
+                optionsField = settings.optionsField;
+                document.getElementById('textOptionsBox').value = settings.optionsField;
+            }
+            if (settings.enableMarkdownConversion !== undefined) {
+                enableMarkdownConversion = settings.enableMarkdownConversion;
+                document.getElementById('rawDisplay').checked = !enableMarkdownConversion;
+            }
+            }
+        });
+
+        // Save settings to localStorage
+        function saveSettings() {
+            const settings = {
+            formatField: formatField,
+            optionsField: optionsField,
+            enableMarkdownConversion: enableMarkdownConversion
+            };
+            localStorage.setItem('ollamaSettings', JSON.stringify(settings));
+        }
+
+        // Update saveSettings function calls
+        function toggleRawDisplay() {
+            enableMarkdownConversion = !enableMarkdownConversion;
+            saveSettings();
+        }
+
+        function setOptionsVar(value) {
+            optionsField = value;
+            document.getElementById('textOptionsBox').style.display = 'none';
+            saveSettings();
+        }
+
+        function setTextVar(value) {
+            formatField = value;
+            document.getElementById('textInputBox').style.display = 'none';
+            saveSettings();
+        }
         var converter = new showdown.Converter();
         var enableMarkdownConversion = true;
         var loadingInterval;
