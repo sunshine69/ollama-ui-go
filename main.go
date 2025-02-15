@@ -1,17 +1,20 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
 	"io/fs"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 
 	// To bundle assets first build the binary - then get into this dir (where the go file has the rice findbox command) and run 'rice append --exec <path-to-bin>
 	rice "github.com/GeertJohan/go.rice"
+	"github.com/ollama/ollama/api"
 	"github.com/sunshine69/ollama-ui-go/lib"
 )
 
@@ -63,19 +66,42 @@ func main() {
 			return
 		}
 
-		requestBody, err := json.Marshal(ollamaRequest)
+		client, err := api.ClientFromEnvironment()
 		if err != nil {
-			http.Error(w, "Failed to marshal request", http.StatusInternalServerError)
+			log.Fatal(err)
+		}
+
+		ctx := context.Background()
+		req := &api.ChatRequest{
+			Model:    ollamaRequest.Model,
+			Messages: ollamaRequest.Messages,
+			Stream:   &ollamaRequest.Stream,
+			Options:  ollamaRequest.Options,
+			Format:   json.RawMessage(ollamaRequest.Format),
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
 			return
 		}
-		requestString := string(requestBody)
-		response, err := lib.AskOllamaAPI(requestString)
+
+		respFunc := func(resp api.ChatResponse) error {
+			// fmt.Print(resp.Message.Content)
+			fmt.Fprint(w, resp.Message.Content)
+			flusher.Flush()
+			return nil
+		}
+
+		err = client.Chat(ctx, req, respFunc)
 		if err != nil {
-			http.Error(w, "Failed to call Ollama API", http.StatusInternalServerError)
+			http.Error(w, "Failed to process chat request", http.StatusInternalServerError)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(response)
 	})
 
 	// http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

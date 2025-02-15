@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/ollama/ollama/api"
 )
 
 type AIMessage struct {
@@ -20,8 +21,7 @@ type OllamaRequest struct {
 	// Prompt   string      `json:"prompt"`
 	Model    string                 `json:"model"`
 	Stream   bool                   `json:"stream"`
-	Messages []AIMessage            `json:"messages"`
-	Images   []string               `json:"images"`
+	Messages []api.Message          `json:"messages"`
 	Format   string                 `json:"format"`
 	Options  map[string]interface{} `json:"options"`
 }
@@ -47,11 +47,11 @@ func parseOllamaEndpoint() {
 	ollamaTagEndpoint = OllamaURL + "/api/tags"
 }
 
-func AskOllamaAPI(question string) ([]byte, error) {
+func AskOllamaAPI(question string) (*http.Response, error) {
 	// Create a POST request to the Ollama API
 	req, err := http.NewRequest("POST", ollamaAPIChatEndpoint, strings.NewReader(question))
 	if err != nil {
-		return []byte(""), err
+		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -59,18 +59,18 @@ func AskOllamaAPI(question string) ([]byte, error) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return []byte(""), err
+		return nil, err
 	}
-	defer resp.Body.Close()
+	// defer resp.Body.Close()
 
 	// Read the response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return []byte(""), err
-	}
+	// body, err := io.ReadAll(resp.Body)
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	// Return the response as a string
-	return body, nil
+	return resp, nil
 }
 
 func GetOllamaModels() ([]byte, error) {

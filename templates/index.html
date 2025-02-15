@@ -18,6 +18,7 @@
             display: flex;
             flex-direction: column;
         }
+
         input[type="text"] {
             margin-bottom: 10px;
             padding: 8px;
@@ -57,8 +58,8 @@
     <div class="container">
         <h1>Ask Ollama</h1>
         <div>
-            <input type="checkbox" id="rawDisplay" onclick="toggleRawDisplay()">
-            <label for="rawDisplay">Raw Display</label>
+            <input type="checkbox" id="enableAutoScroll" onclick="ToggleAutoScroll()" checked>
+            <label for="enableAutoScroll">Auto scroll</label>
             <a href="#" style="float: right; margin-left: 10px;" onclick="showOptionsBox();" title="Set options field. See ollama API doc for more info">Options(json)</a>
             <textarea id="textOptionsBox" style="display: none; width: 50%; height: 100px;" onblur="setOptionsVar(this.value)"></textarea>
             <a href="#" style="float: right; margin-left: 10px;" onclick="showInputBox();" title="Set for format field for structure output. See ollama API doc for more info">Format(json)</a>
@@ -69,7 +70,7 @@
             <a href="#" style="float: right; margin-left: 10px;" onclick="document.getElementById('fileInput').click();">Files(images)</a>
             <a href="#" style="float: right;" onclick="showModelInfo();">Model info</a>
         </div>
-        <div class="result" id="result" style="max-height: 600px; overflow-y: auto;"></div>
+        <textarea class="result" id="result" style="width: 100%; height: 400px; overflow-y: auto;" readonly></textarea>
         <form id="askForm">
             <select id="model_name">
             </select>
@@ -87,6 +88,7 @@
         var imageFileContent = [];
         var formatField = "";
         var optionsField = "";
+        var enableAutoScroll = true;
         // Load saved settings from localStorage
         document.addEventListener('DOMContentLoaded', function() {
             const savedSettings = localStorage.getItem('ollamaSettings');
@@ -103,6 +105,7 @@
             if (settings.enableMarkdownConversion !== undefined) {
                 enableMarkdownConversion = settings.enableMarkdownConversion;
                 document.getElementById('rawDisplay').checked = !enableMarkdownConversion;
+
             }
             }
         });
@@ -112,14 +115,14 @@
             const settings = {
             formatField: formatField,
             optionsField: optionsField,
-            enableMarkdownConversion: enableMarkdownConversion
+            enableAutoScroll: enableAutoScroll
             };
             localStorage.setItem('ollamaSettings', JSON.stringify(settings));
         }
 
         // Update saveSettings function calls
-        function toggleRawDisplay() {
-            enableMarkdownConversion = !enableMarkdownConversion;
+        function ToggleAutoScroll() {
+            enableAutoScroll = document.getElementById('enableAutoScroll').checked;
             saveSettings();
         }
 
@@ -135,13 +138,8 @@
             saveSettings();
         }
         var converter = new showdown.Converter();
-        var enableMarkdownConversion = true;
         var loadingInterval;
         var loadingStartTime;
-
-        function toggleRawDisplay() {
-            enableMarkdownConversion = !enableMarkdownConversion;
-        }
 
         function showOptionsBox() {
             document.getElementById('textOptionsBox').style.display = 'block';
@@ -233,11 +231,10 @@
             }, 1000);
 
             const resultDiv = document.getElementById('result');
-            messages.push({role: "user", content: question});
-            var bodyPayload = { model: model, messages: messages, stream: false };
-            if (imageFileContent.length > 0) {
-                bodyPayload['images'] = imageFileContent;
-            }
+            msg = {role: "user", content: question, images: imageFileContent};
+            messages.push(msg);
+
+            var bodyPayload = { model: model, messages: messages, stream: true };
             if (formatField.length > 0) {
                 bodyPayload['format'] = JSON.parse(formatField);
             }
@@ -251,24 +248,35 @@
                 },
                 body: JSON.stringify(bodyPayload)
             })
-            .then(response => response.json())
-            .then(data => {
-                clearInterval(loadingInterval);
-                document.getElementById('loading').style.display = 'none';
-                if (data.error) {
-                    alert(data.error);
-                } else {
-                    messages.push({role: "assistant", content: data.message.content});
-                    var htmlContent = "";
-                    if (enableMarkdownConversion) {
-                        htmlContent = converter.makeHtml(data.message.content);
-                    } else {
-                        htmlContent = "<pre>" + data.message.content + "</pre>";
-                    }
-                    htmlContent = htmlContent + "<br><br>"+model+"took " + elapsedSeconds + "s to answer</b>";
-                    resultDiv.innerHTML += htmlContent + '<hr/>';
-                    resultDiv.scrollTop = resultDiv.scrollHeight;
+            .then(response => {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buf = '';
+                resultDiv.innerHTML += "\n===== Model: " + model + " =====\n";
+                function readStream() {
+                    reader.read().then(({ done, value }) => {
+                        if (done) {
+                            clearInterval(loadingInterval);
+                            document.getElementById('loading').style.display = 'none';
+                            return;
+                        }
+                        const text = decoder.decode(value, { stream: true });
+
+                        resultDiv.innerHTML += text;
+                        if (enableAutoScroll) {
+                            resultDiv.scrollTop = resultDiv.scrollHeight;
+                        }
+
+                        readStream();
+                    }).catch(error => {
+                        clearInterval(loadingInterval);
+                        document.getElementById('loading').style.display = 'none';
+                        console.error('Stream reading error:', error);
+                        alert('An error occurred while reading the stream.');
+                    });
                 }
+                readStream();
+                resultDiv.innerHTML += "\n=========================================\n";
             })
             .catch(error => {
                 clearInterval(loadingInterval);
