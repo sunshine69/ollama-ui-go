@@ -27,24 +27,24 @@ type OllamaRequest struct {
 }
 
 var (
-	OllamaURL             string
+	OllamaHost            string
 	ollamaAPIChatEndpoint string
 	ollamaTagEndpoint     string
 )
 
 func init() {
-	if OllamaURL == "" {
-		OllamaURL = os.Getenv("OLLAMA_URL")
+	if OllamaHost == "" {
+		OllamaHost = os.Getenv("OLLAMA_HOST")
 	}
-	if OllamaURL == "" {
-		OllamaURL = "http://localhost:11434" // example
+	if OllamaHost == "" {
+		OllamaHost = "http://localhost:11434" // example
 	}
 	parseOllamaEndpoint()
 }
 
 func parseOllamaEndpoint() {
-	ollamaAPIChatEndpoint = OllamaURL + "/api/chat"
-	ollamaTagEndpoint = OllamaURL + "/api/tags"
+	ollamaAPIChatEndpoint = OllamaHost + "/api/chat"
+	ollamaTagEndpoint = OllamaHost + "/api/tags"
 }
 
 func AskOllamaAPI(question string) (*http.Response, error) {
@@ -96,7 +96,7 @@ func GetOllamaModels() ([]byte, error) {
 func GetOllamaModel(modelName string) ([]byte, error) {
 	fmt.Println("[DEBUG] modelName: " + modelName)
 	payload := fmt.Sprintf(`{"model": "%s"}`, modelName)
-	req, err := http.NewRequest("POST", OllamaURL+"/api/show", strings.NewReader(payload))
+	req, err := http.NewRequest("POST", OllamaHost+"/api/show", strings.NewReader(payload))
 	if err != nil {
 		return []byte(""), err
 	}
