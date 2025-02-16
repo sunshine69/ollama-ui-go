@@ -89,26 +89,7 @@
         var formatField = "";
         var optionsField = "";
         var enableAutoScroll = true;
-        // Load saved settings from localStorage
-        document.addEventListener('DOMContentLoaded', function() {
-            const savedSettings = localStorage.getItem('ollamaSettings');
-            if (savedSettings) {
-            const settings = JSON.parse(savedSettings);
-            if (settings.formatField) {
-                formatField = settings.formatField;
-                document.getElementById('textInputBox').value = settings.formatField;
-            }
-            if (settings.optionsField) {
-                optionsField = settings.optionsField;
-                document.getElementById('textOptionsBox').value = settings.optionsField;
-            }
-            if (settings.enableMarkdownConversion !== undefined) {
-                enableMarkdownConversion = settings.enableMarkdownConversion;
-                document.getElementById('rawDisplay').checked = !enableMarkdownConversion;
-
-            }
-            }
-        });
+        var controller = new AbortController();
 
         // Save settings to localStorage
         function saveSettings() {
@@ -145,18 +126,8 @@
             document.getElementById('textOptionsBox').style.display = 'block';
         }
 
-        function setOptionsVar(value) {
-            optionsField = value;
-            document.getElementById('textOptionsBox').style.display = 'none';
-        }
-
         function showInputBox() {
             document.getElementById('textInputBox').style.display = 'block';
-        }
-
-        function setTextVar(value) {
-            formatField = value;
-            document.getElementById('textInputBox').style.display = 'none';
         }
 
         function handleTextFileSelect(event) {
@@ -202,6 +173,23 @@
         }
 
         document.addEventListener('DOMContentLoaded', function() {
+            const savedSettings = localStorage.getItem('ollamaSettings');
+            if (savedSettings) {
+            const settings = JSON.parse(savedSettings);
+            if (settings.formatField) {
+                formatField = settings.formatField;
+                document.getElementById('textInputBox').value = settings.formatField;
+            }
+            if (settings.optionsField) {
+                optionsField = settings.optionsField;
+                document.getElementById('textOptionsBox').value = settings.optionsField;
+            }
+            if (settings.enableMarkdownConversion !== undefined) {
+                enableMarkdownConversion = settings.enableMarkdownConversion;
+                document.getElementById('rawDisplay').checked = !enableMarkdownConversion;
+
+            }
+            }
             fetch('{{.path_base}}/ollama/models')
                 .then(response => response.json())
                 .then(data => {
@@ -221,6 +209,15 @@
         var elapsedSeconds = 0;
         document.getElementById('askForm').addEventListener('submit', function(event) {
             event.preventDefault();
+            const submitButton = document.querySelector('button[type="submit"]');
+            if (submitButton.textContent === 'Submit') {
+                submitButton.textContent = 'Cancel';
+            } else {
+                controller.abort();
+                submitButton.textContent = 'Submit';
+                controller = new AbortController();
+                return;
+            }
             const model = document.getElementById('model_name').value;
             const question = document.getElementById('question').value;
             document.getElementById('loading').style.display = 'block';
@@ -246,7 +243,8 @@
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(bodyPayload)
+                body: JSON.stringify(bodyPayload),
+                signal: controller.signal
             })
             .then(response => {
                 const reader = response.body.getReader();
@@ -277,6 +275,8 @@
                 }
                 readStream();
                 resultDiv.innerHTML += "\n=========================================\n";
+                submitButton.textContent = 'Submit'
+                // controller = new AbortController();
             })
             .catch(error => {
                 clearInterval(loadingInterval);

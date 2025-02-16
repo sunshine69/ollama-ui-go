@@ -89,28 +89,25 @@ func main() {
 			http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
 			return
 		}
-
+		ctx1, cancel := context.WithCancel(ctx)
+		defer cancel()
 		respFunc := func(resp api.ChatResponse) error {
 			// fmt.Print(resp.Message.Content)
-			fmt.Fprint(w, resp.Message.Content)
+			if _, err := fmt.Fprint(w, resp.Message.Content); err != nil {
+				cancel()
+				return err
+			}
 			flusher.Flush()
 			return nil
 		}
 
-		err = client.Chat(ctx, req, respFunc)
+		err = client.Chat(ctx1, req, respFunc)
 		if err != nil {
 			http.Error(w, "Failed to process chat request", http.StatusInternalServerError)
 			return
 		}
 	})
 
-	// http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-	// 	if r.URL.Path == "/" || !strings.HasPrefix(r.URL.Path, path_base+"/ollama") {
-	// 		http.StripPrefix("/", http.FileServer(rice.MustFindBox("static").HTTPBox())).ServeHTTP(w, r)
-	// 	} else {
-	// 		http.NotFound(w, r)
-	// 	}
-	// })
 	t := template.New("tmpl")
 	templateBox := rice.MustFindBox("templates")
 	templateBox.Walk("/", func(path string, info fs.FileInfo, err error) error {
@@ -165,7 +162,7 @@ func isAuthorized(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		// http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	})
 }
