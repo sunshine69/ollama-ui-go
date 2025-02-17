@@ -256,6 +256,7 @@
                         if (done) {
                             clearInterval(loadingInterval);
                             document.getElementById('loading').style.display = 'none';
+                            submitButton.textContent = 'Submit'
                             return;
                         }
                         const text = decoder.decode(value, { stream: true });
@@ -270,13 +271,12 @@
                         clearInterval(loadingInterval);
                         document.getElementById('loading').style.display = 'none';
                         console.error('Stream reading error:', error);
+                        submitButton.textContent = 'Submit'
                         alert('An error occurred while reading the stream.');
                     });
                 }
                 readStream();
                 resultDiv.innerHTML += "\n=========================================\n";
-                submitButton.textContent = 'Submit'
-                // controller = new AbortController();
             })
             .catch(error => {
                 clearInterval(loadingInterval);
