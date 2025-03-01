@@ -19,11 +19,13 @@ type AIMessage struct {
 
 type OllamaRequest struct {
 	// Prompt   string      `json:"prompt"`
-	Model    string                 `json:"model"`
-	Stream   bool                   `json:"stream"`
-	Messages []api.Message          `json:"messages"`
-	Format   string                 `json:"format"`
-	Options  map[string]interface{} `json:"options"`
+	Model     string                 `json:"model"`
+	Stream    bool                   `json:"stream"`
+	Messages  []api.Message          `json:"messages"`
+	Format    string                 `json:"format"`
+	Options   map[string]interface{} `json:"options"`
+	KeepAlive string                 `json:"keep_alive"`
+	Raw       bool                   `json:"raw"`
 }
 
 var (

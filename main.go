@@ -72,12 +72,20 @@ func main() {
 		}
 
 		ctx := context.Background()
+		// dur, err := time.ParseDuration(ollamaRequest.KeepAlive)
+		// if err != nil {
+		// 	http.Error(w, "Invalid keep alive duration", http.StatusBadRequest)
+		// 	return
+		// }
+		// keep_alive := api.Duration{Duration: dur}
+
 		req := &api.ChatRequest{
 			Model:    ollamaRequest.Model,
 			Messages: ollamaRequest.Messages,
 			Stream:   &ollamaRequest.Stream,
 			Options:  ollamaRequest.Options,
 			Format:   json.RawMessage(ollamaRequest.Format),
+			// KeepAlive: &keep_alive,
 		}
 
 		w.Header().Set("Content-Type", "text/event-stream")

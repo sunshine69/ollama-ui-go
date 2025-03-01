@@ -90,6 +90,7 @@
         var optionsField = "";
         var enableAutoScroll = true;
         var controller = new AbortController();
+        var keep_alive = "5m";
 
         // Save settings to localStorage
         function saveSettings() {
@@ -257,6 +258,7 @@
                             clearInterval(loadingInterval);
                             document.getElementById('loading').style.display = 'none';
                             submitButton.textContent = 'Submit'
+                            resultDiv.innerHTML += "\n\nTook "+elapsedSeconds+" to answer\n=========================================\n";
                             return;
                         }
                         const text = decoder.decode(value, { stream: true });
@@ -276,7 +278,6 @@
                     });
                 }
                 readStream();
-                resultDiv.innerHTML += "\n=========================================\n";
             })
             .catch(error => {
                 clearInterval(loadingInterval);
