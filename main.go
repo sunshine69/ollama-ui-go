@@ -139,6 +139,7 @@ func main() {
 	if port == "" {
 		port = "8081"
 	}
+	fmt.Printf("Listening on port %s\n", port)
 	http.ListenAndServe(":"+port, isAuthorized(http.DefaultServeMux))
 }
 

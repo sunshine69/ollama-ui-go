@@ -60,7 +60,7 @@
         <div>
             <input type="checkbox" id="enableAutoScroll" onclick="ToggleAutoScroll()" checked>
             <label for="enableAutoScroll">Auto scroll</label>
-            <a href="#" style="float: right; margin-left: 10px;" onclick="showOptionsBox();" title="Set options field. See ollama API doc for more info">Options(json)</a>
+            <a href="#" style="float: right; margin-left: 10px;" onclick="showOptionsBox();" title='Set options field. See ollama API doc for more info. Expect a json, eg {"options": {}, stream: false}'>Options(json)</a>
             <textarea id="textOptionsBox" style="display: none; width: 50%; height: 100px;" onblur="setOptionsVar(this.value)"></textarea>
             <a href="#" style="float: right; margin-left: 10px;" onclick="showInputBox();" title="Set for format field for structure output. See ollama API doc for more info">Format(json)</a>
             <textarea id="textInputBox" style="display: none; width: 50%; height: 100px;" onblur="setTextVar(this.value)"></textarea>
@@ -89,6 +89,7 @@
         var formatField = "";
         var optionsField = "";
         var enableAutoScroll = true;
+        var stream = true;
         var controller = new AbortController();
         var keep_alive = "5m";
 
@@ -232,13 +233,21 @@
             msg = {role: "user", content: question, images: imageFileContent};
             messages.push(msg);
 
-            var bodyPayload = { model: model, messages: messages, stream: true };
+            var bodyPayload = { model: model, messages: messages};
             if (formatField.length > 0) {
                 bodyPayload['format'] = JSON.parse(formatField);
             }
             if (optionsField.length > 0) {
-                bodyPayload['options'] = JSON.parse(optionsField);
+                allOptions = JSON.parse(optionsField);
+                if (allOptions.hasOwnProperty('options')) {
+                    bodyPayload['options'] = allOptions.options;
+                }
+                if (allOptions.hasOwnProperty('stream')) {
+                    stream = allOptions.stream;
+                }
             }
+            bodyPayload['stream'] = stream;
+
             fetch('{{.path_base}}/ollama/ask', {
                 method: 'POST',
                 headers: {
@@ -258,7 +267,7 @@
                             clearInterval(loadingInterval);
                             document.getElementById('loading').style.display = 'none';
                             submitButton.textContent = 'Submit'
-                            resultDiv.innerHTML += "\n\nTook "+elapsedSeconds+" to answer\n=========================================\n";
+                            resultDiv.innerHTML += "\n\nTook "+elapsedSeconds+" secs to answer\n=========================================\n";
                             return;
                         }
                         const text = decoder.decode(value, { stream: true });
