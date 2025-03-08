@@ -9,17 +9,22 @@
             font-family: Arial, sans-serif;
             margin: 0;
             padding: 20px;
+            display: flex;
+        }
+        .menu {
+            width: 20%;
+            padding: 20px;
+            border-right: 1px solid #ccc;
         }
         .container {
-            max-width: 600px;
-            margin: 0 auto;
+            width: 80%;
+            padding: 20px;
         }
         form {
             display: flex;
             flex-direction: column;
         }
-
-        input[type="text"] {
+        input[type="text"], textarea {
             margin-bottom: 10px;
             padding: 8px;
             border: 1px solid #ccc;
@@ -46,15 +51,52 @@
             color: #333;
             animation: blink 1s infinite;
         }
-
         @keyframes blink {
             0% { opacity: 1; }
             50% { opacity: 0; }
             100% { opacity: 1; }
         }
+        @media (max-width: 768px) {
+            .menu {
+                display: none;
+            }
+            .container {
+                width: 100%;
+            }
+            #menuToggle {
+                display: block;
+                margin-bottom: 10px;
+            }
+        }
+        #menuToggle {
+            display: none;
+            padding: 10px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        @media (max-width: 768px) {
+            #menuToggle {
+                display: block;
+            }
+        }
+        #menuToggle:hover {
+            background-color: #0056b3;
+        }
     </style>
 </head>
 <body>
+    <div class="menu" id="menu">
+        <h2>Menu</h2>
+        <ul>
+            <li><a href="#">Conversation 1</a></li>
+            <li><a href="#">Conversation 2</a></li>
+            <li><a href="#">Conversation 3</a></li>
+            <!-- Add more menu items as needed -->
+        </ul>
+    </div>
     <div class="container">
         <h1>Ask Ollama</h1>
         <div>
@@ -78,6 +120,9 @@
             <div style="display: flex; gap: 10px; justify-content: center;">
                 <button type="submit" style="flex: 1;">Submit</button>
                 <button type="button" style="flex: 1;" onclick="newChat()">New Chat</button>
+                <button type="submit" style="flex: 1;">Email</button>
+                <button type="submit" style="flex: 1;">Save</button>
+                <button id="menuToggle" style="flex: 1; padding: 10px; background-color: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;" onclick="toggleMenu()">History</button>
             </div>
         </form>
         <div class="loading" id="loading" style="display: none;">Loading...</div>
@@ -172,6 +217,18 @@
         function newChat() {
             messages = [];
             document.getElementById('result').innerHTML = '';
+        }
+
+        function toggleMenu() {
+            const menu = document.getElementById('menu');
+            const container = document.querySelector('.container');
+            if (menu.style.display === 'block') {
+                menu.style.display = 'none';
+                container.style.display = 'block';
+            } else {
+                menu.style.display = 'block';
+                container.style.display = 'none';
+            }
         }
 
         document.addEventListener('DOMContentLoaded', function() {
