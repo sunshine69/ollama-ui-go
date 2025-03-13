@@ -2,6 +2,7 @@ package lib
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -26,6 +27,7 @@ type OllamaRequest struct {
 	Options   map[string]interface{} `json:"options"`
 	KeepAlive string                 `json:"keep_alive"`
 	Raw       bool                   `json:"raw"`
+	Tools     api.Tools              `json:"tools"`
 }
 
 var (
@@ -156,4 +158,48 @@ func ValidateJWT(jwtToken, storedPasswordHash string) (string, error) {
 		return claims["sub"].(string), nil
 	}
 	return "", fmt.Errorf("Invalid password")
+}
+
+type ToolFunctionResponse struct {
+	Type     string `json:"type"`
+	Function struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		Parameters  struct {
+			Type       string   `json:"type"`
+			Required   []string `json:"required"`
+			Properties map[string]struct {
+				Type        string   `json:"type"`
+				Description string   `json:"description"`
+				Enum        []string `json:"enum,omitempty"`
+			} `json:"properties"`
+		} `json:"parameters"`
+		Arguments map[string]interface{} `json:"arguments"`
+	} `json:"function"`
+}
+
+func ParseToolCalls(inputString string) (toolfFunctions []ToolFunctionResponse, err error) {
+	// Find the start and end indices of the string_data part.
+	start := strings.Index(inputString, "<|tool_call|>")
+	if start == -1 {
+		return toolfFunctions, fmt.Errorf("tool_call tag not found")
+	}
+	end := strings.Index(inputString, "<|/tool_call|>")
+	if end == -1 {
+		return toolfFunctions, fmt.Errorf("/tool_call/ tag not found")
+	}
+
+	// Extract the string_data part.
+	data := inputString[start+len("<|tool_call|>") : end]
+	fmt.Fprintf(os.Stderr, "[DEBUG] data: %s\n", data)
+	err = json.Unmarshal([]byte(data), &toolfFunctions)
+	return toolfFunctions, err
+}
+
+func FlattenArgument(arugments map[string]any) []string {
+	var args []string
+	for _, v := range arugments {
+		args = append(args, v.(string))
+	}
+	return args
 }

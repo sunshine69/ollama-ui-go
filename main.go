@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"plugin"
 
 	// To bundle assets first build the binary - then get into this dir (where the go file has the rice findbox command) and run 'rice append --exec <path-to-bin>
 	rice "github.com/GeertJohan/go.rice"
@@ -19,6 +20,19 @@ import (
 )
 
 var AcceptedUsers = map[string]string{}
+var toolsPlugin *plugin.Plugin
+
+func init() {
+	if _, err := os.Stat("ai-tools.so"); os.IsNotExist(err) {
+		fmt.Println("ai-tools.so not found")
+	} else {
+		if toolsPlugin, err = plugin.Open("ai-tools.so"); err != nil {
+			fmt.Println("Failed to load plugin", err)
+		} else {
+			fmt.Println("Plugin loaded")
+		}
+	}
+}
 
 func main() {
 	path_base := os.Getenv("PATH_BASE")
@@ -85,6 +99,7 @@ func main() {
 			Stream:   &ollamaRequest.Stream,
 			Options:  ollamaRequest.Options,
 			Format:   json.RawMessage(ollamaRequest.Format),
+			Tools:    ollamaRequest.Tools,
 			// KeepAlive: &keep_alive,
 		}
 
@@ -100,10 +115,36 @@ func main() {
 		ctx1, cancel := context.WithCancel(ctx)
 		defer cancel()
 		respFunc := func(resp api.ChatResponse) error {
-			// fmt.Print(resp.Message.Content)
-			if _, err := fmt.Fprint(w, resp.Message.Content); err != nil {
-				cancel()
-				return err
+			// Not sure why resp.Message.ToolCalls isd always empty list. ollama bug?
+			// The response Message Content is in the format <|tool_call|>content<|tool_call|> where content is a json which ahs the AI response. We need to parse this and make a decision on how to handle it.
+			if len(resp.Message.ToolCalls) > 0 { // Just put in here, maybe they fix it or some model suppoprt it
+				for _, toolCall := range resp.Message.ToolCalls {
+					fmt.Fprintf(os.Stderr, "[DEBUG] func name: %s Args: %s\n", toolCall.Function.Name, toolCall.Function.Arguments.String())
+					// fmt.Fprint(w, "\n\n*****\n[DEBUG] FUNC_NAME "+toolCall.Function.Name)
+				}
+			} else {
+				if toolsFuncs, err := lib.ParseToolCalls(resp.Message.Content); err == nil {
+					if toolsPlugin == nil {
+						fmt.Fprint(w, resp.Message.Content)
+					} else {
+						fmt.Fprintf(os.Stderr, "\n\n*****\n[DEBUG] FUNC_NAME %q\n", toolsFuncs)
+						toolFunc := toolsFuncs[0].Function
+						fmt.Fprintf(os.Stderr, "\n\n*****\n[DEBUG] FUNC_NAME %s\n", toolFunc.Name)
+						if f, err := toolsPlugin.Lookup(toolFunc.Name); err == nil {
+							output := f.(func(...string) string)(lib.FlattenArgument(toolFunc.Arguments)...)
+							fmt.Fprint(w, output)
+						} else {
+							fmt.Println("Failed to lookup function", err)
+							fmt.Fprint(w, resp.Message.Content)
+						}
+					}
+				} else {
+					_, err := fmt.Fprint(w, resp.Message.Content)
+					if err != nil {
+						cancel()
+						return err
+					}
+				}
 			}
 			flusher.Flush()
 			return nil

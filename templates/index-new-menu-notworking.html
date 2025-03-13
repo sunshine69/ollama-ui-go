@@ -9,17 +9,22 @@
             font-family: Arial, sans-serif;
             margin: 0;
             padding: 20px;
+            display: flex;
+        }
+        .menu {
+            width: 20%;
+            padding: 20px;
+            border-right: 1px solid #ccc;
         }
         .container {
-            max-width: 600px;
-            margin: 0 auto;
+            width: 80%;
+            padding: 20px;
         }
         form {
             display: flex;
             flex-direction: column;
         }
-
-        input[type="text"] {
+        input[type="text"], textarea {
             margin-bottom: 10px;
             padding: 8px;
             border: 1px solid #ccc;
@@ -46,15 +51,46 @@
             color: #333;
             animation: blink 1s infinite;
         }
-
         @keyframes blink {
             0% { opacity: 1; }
             50% { opacity: 0; }
             100% { opacity: 1; }
         }
+        @media (max-width: 768px) {
+            .menu {
+                display: none;
+            }
+            .container {
+                width: 100%;
+            }
+            #menuToggle {
+                display: block;
+                margin-bottom: 10px;
+            }
+        }
+        #menuToggle {
+            display: none;
+            padding: 10px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        @media (max-width: 768px) {
+            #menuToggle {
+                display: block;
+            }
+        }
+        #menuToggle:hover {
+            background-color: #0056b3;
+        }
     </style>
 </head>
 <body>
+    <!-- <div class="menu" id="menu">
+        <h2>Menu</h2>
+    </div> -->
     <div class="container">
         <h1>Ask Ollama</h1>
         <div>
@@ -78,6 +114,9 @@
             <div style="display: flex; gap: 10px; justify-content: center;">
                 <button type="submit" style="flex: 1;">Submit</button>
                 <button type="button" style="flex: 1;" onclick="newChat()">New Chat</button>
+                <button type="submit" style="flex: 1;">Email</button>
+                <button type="submit" style="flex: 1;">Save</button>
+                <button id="menuToggle" style="flex: 1; padding: 10px; background-color: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;" onclick="toggleMenu()">History</button>
             </div>
         </form>
         <div class="loading" id="loading" style="display: none;">Loading...</div>
@@ -175,13 +214,14 @@
             const reader = new FileReader();
             reader.onload = function(e) {
                 const content = e.target.result;
-                document.getElementById('question').value = "Context: \n" +  content + "\nQuestion: ";
+                document.getElementById('question').value = content;
             };
             reader.readAsText(file);
         }
 
         function handleFileSelect(event) {
             const files = event.target.files;
+            imageFileContent = [];
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
                 const reader = new FileReader();
@@ -207,31 +247,87 @@
                     alert('An error occurred while fetching the model information.');
                 });
         }
+        function updateMenu() {
+            menu = document.getElementById('menu');
+            menu.innerHTML = '<h2>Menu</h2><ul>';
+            console.log("DEBUG Updated menu HTML:", menu.innerHTML);
+            const chatHistory = JSON.parse(localStorage.getItem('chatHistory')) || [];
+            chatHistory.forEach((chat, index) => {
+                var listItem = document.createElement('li');
+                var link = document.createElement('a');
+                var chatHistoryLink = document.createElement('a');
+                chatHistoryLink.href = '#';
+                chatHistoryLink.textContent = 'View Chat History';
+                chatHistoryLink.onclick = function() {
+                    console.log("DEBUG Menu HTML just before adding chatHistoryDiv:", menu.innerHTML);
+                    const chatHistory = JSON.parse(localStorage.getItem('chatHistory')) || [];
+                    const chatHistoryDiv = document.createElement('div');
+                    chatHistoryDiv.id = 'chatHistoryDiv';
+                    chatHistoryDiv.style.border = '1px solid #ccc';
+                    chatHistoryDiv.style.padding = '10px';
+                    chatHistoryDiv.style.marginTop = '10px';
+                    chatHistoryDiv.style.maxHeight = '200px';
+                    chatHistoryDiv.style.overflowY = 'auto';
+                    chatHistoryDiv.innerHTML = '<h3>Chat History</h3>';
+                    chatHistory.forEach((chat, index) => {
+                        const chatItem = document.createElement('div');
+                        chatItem.innerHTML = `<strong>Conversation ${index + 1}:</strong><br>Question: ${chat.question}<br>Result: ${chat.result}<br><br>`;
+                        chatHistoryDiv.appendChild(chatItem);
+                    });
+                    console.log("DEBUG Menu HTML just before appending chatHistoryDiv:", menu.innerHTML);
+                    menu.appendChild(chatHistoryDiv);
+                };
+                menu.appendChild(chatHistoryLink);
+            });
+            menu.innerHTML += '</ul>';
+        }
 
         function newChat() {
+            const menu = document.getElementById('menu');
+            const question = document.getElementById('question').value;
+            const resultDiv = document.getElementById('result').innerHTML;
+            const chatHistory = JSON.parse(localStorage.getItem('chatHistory')) || [];
+            // console.log("DEBUG Current menu HTML:", menu.innerHTML);
+            if (question.length > 0 && resultDiv.length > 0) {
+                chatHistory.push({ question: question, result: resultDiv });
+                localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
+            }
+            // updateMenu();
             messages = [];
-            imageFileContent = [];
             document.getElementById('result').innerHTML = '';
+        }
+
+        function toggleMenu() {
+            const menu = document.getElementById('menu');
+            const container = document.querySelector('.container');
+            if (menu.style.display === 'block') {
+                menu.style.display = 'none';
+                container.style.display = 'block';
+            } else {
+                menu.style.display = 'block';
+                container.style.display = 'none';
+            }
         }
 
         document.addEventListener('DOMContentLoaded', function() {
             const savedSettings = localStorage.getItem('ollamaSettings');
             if (savedSettings) {
-            const settings = JSON.parse(savedSettings);
-            if (settings.formatField) {
-                formatField = settings.formatField;
-                document.getElementById('textInputBox').value = settings.formatField;
-            }
-            if (settings.optionsField) {
-                optionsField = settings.optionsField;
-                document.getElementById('textOptionsBox').value = settings.optionsField;
-            }
-            if (settings.enableMarkdownConversion !== undefined) {
-                enableMarkdownConversion = settings.enableMarkdownConversion;
-                document.getElementById('rawDisplay').checked = !enableMarkdownConversion;
+                const settings = JSON.parse(savedSettings);
+                if (settings.formatField) {
+                    formatField = settings.formatField;
+                    document.getElementById('textInputBox').value = settings.formatField;
+                }
+                if (settings.optionsField) {
+                    optionsField = settings.optionsField;
+                    document.getElementById('textOptionsBox').value = settings.optionsField;
+                }
+                if (settings.enableMarkdownConversion !== undefined) {
+                    enableMarkdownConversion = settings.enableMarkdownConversion;
+                    document.getElementById('rawDisplay').checked = !enableMarkdownConversion;
 
+                }
             }
-            }
+            // updateMenu();
             fetch('{{.path_base}}/ollama/models')
                 .then(response => response.json())
                 .then(data => {
@@ -284,9 +380,6 @@
                 }
                 if (allOptions.hasOwnProperty('stream')) {
                     stream = allOptions.stream;
-                }
-                if (allOptions.hasOwnProperty('tools')) {
-                    bodyPayload['tools'] = allOptions.tools;
                 }
             }
             bodyPayload['stream'] = stream;
