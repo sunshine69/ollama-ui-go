@@ -1,4 +1,5 @@
-// Build like this go build -buildmode=plugin -o ai-tools.so ai-tools.go
+// Build like this env CGO=0 go build -trimpath --tags "json1 fts5 secure_delete osusergo netgo sqlite_stat4 sqlite_foreign_keys" -ldflags="-X main.version=v1.0 -extldflags=-w -s" -buildmode=plugin ai-tools.go
+
 package main
 
 // Get_current_weather is a dummy function that returns a string.

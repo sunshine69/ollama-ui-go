@@ -1,5 +1,7 @@
 package main
 
+// build like this env CGO=0 go build -trimpath --tags "json1 fts5 secure_delete osusergo netgo sqlite_stat4 sqlite_foreign_keys" -ldflags="-X main.version=v1.0 -extldflags=-w -s"
+
 import (
 	"context"
 	"encoding/json"
@@ -117,17 +119,17 @@ func main() {
 		respFunc := func(resp api.ChatResponse) error {
 			// Not sure why resp.Message.ToolCalls isd always empty list. ollama bug?
 			// The response Message Content is in the format <|tool_call|>content<|tool_call|> where content is a json which ahs the AI response. We need to parse this and make a decision on how to handle it.
-			if len(resp.Message.ToolCalls) > 0 { // Just put in here, maybe they fix it or some model suppoprt it
+			if len(resp.Message.ToolCalls) > 0 { // yeah some model support it. Might be ollama does not understand other model tags
 				for _, toolCall := range resp.Message.ToolCalls {
 					fmt.Fprintf(os.Stderr, "[DEBUG] func name: %s Args: %s\n", toolCall.Function.Name, toolCall.Function.Arguments.String())
-					// fmt.Fprint(w, "\n\n*****\n[DEBUG] FUNC_NAME "+toolCall.Function.Name)
+					// TODO: Implement the tool call here
 				}
 			} else {
 				if toolsFuncs, err := lib.ParseToolCalls(resp.Message.Content); err == nil {
 					if toolsPlugin == nil {
 						fmt.Fprint(w, resp.Message.Content)
 					} else {
-						fmt.Fprintf(os.Stderr, "\n\n*****\n[DEBUG] FUNC_NAME %q\n", toolsFuncs)
+						fmt.Fprintf(os.Stderr, "\n\n*****\n[DEBUG] TOOL_FUNC %q\n", toolsFuncs)
 						toolFunc := toolsFuncs[0].Function
 						fmt.Fprintf(os.Stderr, "\n\n*****\n[DEBUG] FUNC_NAME %s\n", toolFunc.Name)
 						if f, err := toolsPlugin.Lookup(toolFunc.Name); err == nil {
