@@ -1,6 +1,6 @@
 module github.com/sunshine69/ollama-ui-go
 
-go 1.23.5
+go 1.24.0
 
 replace github.com/sunshine69/ollama-ui-go/lib => ./lib
 
