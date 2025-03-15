@@ -3,38 +3,20 @@ package main
 // build like this env CGO=0 go build -trimpath --tags "json1 fts5 secure_delete osusergo netgo sqlite_stat4 sqlite_foreign_keys" -ldflags="-X main.version=v1.0 -extldflags=-w -s"
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"io"
 	"io/fs"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
-	"plugin"
 
 	// To bundle assets first build the binary - then get into this dir (where the go file has the rice findbox command) and run 'rice append --exec <path-to-bin>
 	rice "github.com/GeertJohan/go.rice"
-	"github.com/ollama/ollama/api"
 	"github.com/sunshine69/ollama-ui-go/lib"
 )
 
 var AcceptedUsers = map[string]string{}
-var toolsPlugin *plugin.Plugin
-
-func init() {
-	if _, err := os.Stat("ai-tools.so"); os.IsNotExist(err) {
-		fmt.Println("ai-tools.so not found")
-	} else {
-		if toolsPlugin, err = plugin.Open("ai-tools.so"); err != nil {
-			fmt.Println("Failed to load plugin", err)
-		} else {
-			fmt.Println("Plugin loaded")
-		}
-	}
-}
 
 func main() {
 	path_base := os.Getenv("PATH_BASE")
@@ -57,108 +39,9 @@ func main() {
 		w.Write(modelInfo)
 	})
 
-	http.HandleFunc(path_base+"/ollama/models", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc(path_base+"/ollama/models", lib.HandleOllamaGetModels)
 
-		models, err := lib.GetOllamaModels()
-		if err != nil {
-			http.Error(w, "Failed to call Ollama API", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(models)
-	})
-
-	http.HandleFunc(path_base+"/ollama/ask", func(w http.ResponseWriter, r *http.Request) {
-
-		var ollamaRequest lib.OllamaRequest
-		jsonData, err := io.ReadAll(r.Body)
-		if err != nil {
-			http.Error(w, "Failed to read request body", http.StatusBadRequest)
-			return
-		}
-		fmt.Println(string(jsonData))
-		if err := json.Unmarshal(jsonData, &ollamaRequest); err != nil {
-			http.Error(w, "Invalid request payload", http.StatusBadRequest)
-			return
-		}
-
-		client, err := api.ClientFromEnvironment()
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		ctx := context.Background()
-		// dur, err := time.ParseDuration(ollamaRequest.KeepAlive)
-		// if err != nil {
-		// 	http.Error(w, "Invalid keep alive duration", http.StatusBadRequest)
-		// 	return
-		// }
-		// keep_alive := api.Duration{Duration: dur}
-
-		req := &api.ChatRequest{
-			Model:    ollamaRequest.Model,
-			Messages: ollamaRequest.Messages,
-			Stream:   &ollamaRequest.Stream,
-			Options:  ollamaRequest.Options,
-			Format:   json.RawMessage(ollamaRequest.Format),
-			Tools:    ollamaRequest.Tools,
-			// KeepAlive: &keep_alive,
-		}
-
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("Connection", "keep-alive")
-
-		flusher, ok := w.(http.Flusher)
-		if !ok {
-			http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
-			return
-		}
-		ctx1, cancel := context.WithCancel(ctx)
-		defer cancel()
-		respFunc := func(resp api.ChatResponse) error {
-			// Not sure why resp.Message.ToolCalls isd always empty list. ollama bug?
-			// The response Message Content is in the format <|tool_call|>content<|tool_call|> where content is a json which ahs the AI response. We need to parse this and make a decision on how to handle it.
-			if len(resp.Message.ToolCalls) > 0 { // yeah some model support it. Might be ollama does not understand other model tags
-				for _, toolCall := range resp.Message.ToolCalls {
-					fmt.Fprintf(os.Stderr, "[DEBUG] func name: %s Args: %s\n", toolCall.Function.Name, toolCall.Function.Arguments.String())
-					// TODO: Implement the tool call here
-				}
-			} else {
-				if toolsFuncs, err := lib.ParseToolCalls(resp.Message.Content); err == nil {
-					if toolsPlugin == nil {
-						fmt.Fprint(w, resp.Message.Content)
-					} else {
-						fmt.Fprintf(os.Stderr, "\n\n*****\n[DEBUG] TOOL_FUNC %q\n", toolsFuncs)
-						toolFunc := toolsFuncs[0].Function
-						fmt.Fprintf(os.Stderr, "\n\n*****\n[DEBUG] FUNC_NAME %s\n", toolFunc.Name)
-						if f, err := toolsPlugin.Lookup(toolFunc.Name); err == nil {
-							output := f.(func(...string) string)(lib.FlattenArgument(toolFunc.Arguments)...)
-							fmt.Fprint(w, output)
-						} else {
-							fmt.Println("Failed to lookup function", err)
-							fmt.Fprint(w, resp.Message.Content)
-						}
-					}
-				} else {
-					_, err := fmt.Fprint(w, resp.Message.Content)
-					if err != nil {
-						cancel()
-						return err
-					}
-				}
-			}
-			flusher.Flush()
-			return nil
-		}
-
-		err = client.Chat(ctx1, req, respFunc)
-		if err != nil {
-			http.Error(w, "Failed to process chat request", http.StatusInternalServerError)
-			return
-		}
-	})
-
+	http.HandleFunc(path_base+"/ollama/ask", lib.HandleOllamaChat)
 	t := template.New("tmpl")
 	templateBox := rice.MustFindBox("templates")
 	templateBox.Walk("/", func(path string, info fs.FileInfo, err error) error {
