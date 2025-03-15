@@ -28,16 +28,7 @@ func main() {
 		fmt.Println(`[INFO] If you want to set your own then set env var 'ACCEPTED_USERS' with a json string in the format '{"your-user-name": "your-jwt-secret"}'. To login provide the username and the jwt token generated using the secret and the 'sub' field must be set to the username.`)
 	}
 
-	http.HandleFunc(path_base+"/ollama/model/", func(w http.ResponseWriter, r *http.Request) {
-		modelName := r.URL.Path[len(path_base+"/ollama/model/"):]
-		modelInfo, err := lib.GetOllamaModel(modelName)
-		if err != nil {
-			http.Error(w, "Failed to fetch model information", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(modelInfo)
-	})
+	http.HandleFunc(path_base+"/ollama/model/{model_name}", lib.HandleOllamaGetModel)
 
 	http.HandleFunc(path_base+"/ollama/models", lib.HandleOllamaGetModels)
 

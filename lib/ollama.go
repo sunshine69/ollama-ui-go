@@ -326,3 +326,16 @@ func HandleOllamaChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+func HandleOllamaGetModel(w http.ResponseWriter, r *http.Request) {
+	// path_base := os.Getenv("PATH_BASE")
+	// modelName := r.URL.Path[len(path_base+"/ollama/model/"):]
+	modelName := r.PathValue("model_name")
+	modelInfo, err := GetOllamaModel(modelName)
+	if err != nil {
+		http.Error(w, "Failed to fetch model information", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(modelInfo)
+}
