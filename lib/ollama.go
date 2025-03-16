@@ -282,7 +282,7 @@ func HandleOllamaChat(w http.ResponseWriter, r *http.Request) {
 					fmt.Fprint(w, resp.Message.Content)
 				} else {
 					jsonin := u.JsonDumpByte(toolCall.Function.Arguments, "")
-					output := RunLuaFile("lua-tools/"+toolCall.Function.Name+".lua", jsonin)
+					output, _ := RunLuaFile("lua-tools/"+toolCall.Function.Name+".lua", jsonin)
 					fmt.Fprint(w, output)
 				}
 			}
@@ -295,11 +295,12 @@ func HandleOllamaChat(w http.ResponseWriter, r *http.Request) {
 						fmt.Fprint(w, resp.Message.Content)
 					} else {
 						jsonin := u.JsonDumpByte(toolCall.Function.Arguments, "")
-						output := RunLuaFile("lua-tools/"+toolCall.Function.Name+".lua", jsonin)
+						output, _ := RunLuaFile("lua-tools/"+toolCall.Function.Name+".lua", jsonin)
 						fmt.Fprint(w, output)
 					}
 				}
 			} else {
+				// fmt.Fprintln(os.Stderr, "Failed to parse tool calls "+err.Error())
 				_, err := fmt.Fprint(w, resp.Message.Content)
 				if err != nil {
 					cancel()
@@ -331,16 +332,11 @@ func HandleOllamaGetModel(w http.ResponseWriter, r *http.Request) {
 	w.Write(modelInfo)
 }
 
-func RunLuaFile(luaFileName string, inputData []byte) []byte {
+func RunLuaFile(luaFileName string, inputData []byte) ([]byte, error) {
 	old := os.Stdout     // keep backup of the real stdout
 	oldStdin := os.Stdin // keep backup of the real stdin
 
 	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	inR, inW, _ := os.Pipe()
-	os.Stdin = inR
-
 	outC := make(chan []byte)
 	// copy the output in a separate goroutine so printing can't block indefinitely
 	go func() {
@@ -348,6 +344,10 @@ func RunLuaFile(luaFileName string, inputData []byte) []byte {
 		io.Copy(&buf, r)
 		outC <- buf.Bytes()
 	}()
+	os.Stdout = w
+
+	inR, inW, _ := os.Pipe()
+	os.Stdin = inR
 
 	L := lua.NewState()
 	defer L.Close()
@@ -357,17 +357,24 @@ func RunLuaFile(luaFileName string, inputData []byte) []byte {
 	L.PreloadModule("json", gopherjson.Loader)
 
 	// Write input data to stdin
-	inW.Write(inputData)
+	byteCount, err := inW.Write(inputData)
+	if err != nil {
+		os.Stdout = old
+		os.Stdin = oldStdin
+		fmt.Println("Failed to write to stdin", err.Error())
+		return nil, err
+	}
 	inW.Close()
 
-	err := L.DoFile(luaFileName)
+	err = L.DoFile(luaFileName)
 	if err != nil {
-		fmt.Print(err.Error())
+		return nil, err
 	}
 
 	w.Close()
 	os.Stdout = old
 	os.Stdin = oldStdin
+	fmt.Println("byteCount: ", byteCount)
 	out := <-outC
-	return out
+	return out, nil
 }
