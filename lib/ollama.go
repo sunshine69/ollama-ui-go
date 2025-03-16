@@ -1,6 +1,7 @@
 package lib
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/json"
@@ -9,26 +10,18 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"plugin"
 	"strings"
 
+	"github.com/cjoudrey/gluahttp"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/kohkimakimoto/gluayaml"
 	"github.com/ollama/ollama/api"
+	"github.com/sunshine69/gluare"
+
+	u "github.com/sunshine69/golang-tools/utils"
+	gopherjson "github.com/sunshine69/gopher-json"
+	lua "github.com/yuin/gopher-lua"
 )
-
-var ToolsPlugin *plugin.Plugin
-
-func init() {
-	if _, err := os.Stat("ai-tools.so"); os.IsNotExist(err) {
-		fmt.Println("ai-tools.so not found")
-	} else {
-		if ToolsPlugin, err = plugin.Open("ai-tools.so"); err != nil {
-			fmt.Println("Failed to load plugin", err)
-		} else {
-			fmt.Println("Plugin loaded")
-		}
-	}
-}
 
 type AIMessage struct {
 	Role    string `json:"role"`
@@ -284,28 +277,26 @@ func HandleOllamaChat(w http.ResponseWriter, r *http.Request) {
 		if len(resp.Message.ToolCalls) > 0 { // yeah some model support it. Might be ollama does not understand other model tags
 			for _, toolCall := range resp.Message.ToolCalls {
 				fmt.Fprintf(os.Stderr, "[DEBUG] func name: %s Args: %s\n", toolCall.Function.Name, toolCall.Function.Arguments.String())
-				if f, err := ToolsPlugin.Lookup(toolCall.Function.Name); err == nil {
-					output := f.(func(...string) string)(FlattenArgument(toolCall.Function.Arguments)...)
-					fmt.Fprint(w, output)
-				} else {
-					fmt.Println("Failed to lookup function", err)
+				if _, err := os.Stat("lua-tools/" + toolCall.Function.Name + ".lua"); os.IsNotExist(err) {
+					fmt.Println("Failed to lookup lua file", err)
 					fmt.Fprint(w, resp.Message.Content)
+				} else {
+					jsonin := u.JsonDumpByte(toolCall.Function.Arguments, "")
+					output := RunLuaFile("lua-tools/"+toolCall.Function.Name+".lua", jsonin)
+					fmt.Fprint(w, output)
 				}
 			}
-		} else {
+		} else { // Non standard tools call - like gemma3; they give it in the response text
 			if toolsFuncs, err := ParseToolCalls(resp.Message.Content); err == nil {
-				if ToolsPlugin == nil {
-					fmt.Fprint(w, resp.Message.Content)
-				} else {
-					fmt.Fprintf(os.Stderr, "\n\n*****\n[DEBUG] TOOL_FUNC %q\n", toolsFuncs)
-					toolFunc := toolsFuncs[0].Function
-					fmt.Fprintf(os.Stderr, "\n\n*****\n[DEBUG] FUNC_NAME %s\n", toolFunc.Name)
-					if f, err := ToolsPlugin.Lookup(toolFunc.Name); err == nil {
-						output := f.(func(...string) string)(FlattenArgument(toolFunc.Arguments)...)
-						fmt.Fprint(w, output)
-					} else {
-						fmt.Println("Failed to lookup function", err)
+				for _, toolCall := range toolsFuncs {
+					fmt.Fprintf(os.Stderr, "[DEBUG] func name: %s Args: %s\n", toolCall.Function.Name, toolCall.Function.Arguments)
+					if _, err := os.Stat("lua-tools/" + toolCall.Function.Name + ".lua"); os.IsNotExist(err) {
+						fmt.Println("Failed to lookup lua file", err)
 						fmt.Fprint(w, resp.Message.Content)
+					} else {
+						jsonin := u.JsonDumpByte(toolCall.Function.Arguments, "")
+						output := RunLuaFile("lua-tools/"+toolCall.Function.Name+".lua", jsonin)
+						fmt.Fprint(w, output)
 					}
 				}
 			} else {
@@ -338,4 +329,45 @@ func HandleOllamaGetModel(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(modelInfo)
+}
+
+func RunLuaFile(luaFileName string, inputData []byte) []byte {
+	old := os.Stdout     // keep backup of the real stdout
+	oldStdin := os.Stdin // keep backup of the real stdin
+
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	inR, inW, _ := os.Pipe()
+	os.Stdin = inR
+
+	outC := make(chan []byte)
+	// copy the output in a separate goroutine so printing can't block indefinitely
+	go func() {
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		outC <- buf.Bytes()
+	}()
+
+	L := lua.NewState()
+	defer L.Close()
+	L.PreloadModule("re", gluare.Loader)
+	L.PreloadModule("http", gluahttp.NewHttpModule(&http.Client{}).Loader)
+	L.PreloadModule("yaml", gluayaml.Loader)
+	L.PreloadModule("json", gopherjson.Loader)
+
+	// Write input data to stdin
+	inW.Write(inputData)
+	inW.Close()
+
+	err := L.DoFile(luaFileName)
+	if err != nil {
+		fmt.Print(err.Error())
+	}
+
+	w.Close()
+	os.Stdout = old
+	os.Stdin = oldStdin
+	out := <-outC
+	return out
 }
