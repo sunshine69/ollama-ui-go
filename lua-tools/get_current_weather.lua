@@ -1,0 +1,5 @@
+local input_data_file = os.getenv("INPUT_DATA_FILE")
+local file = io.open(input_data_file, "r")
+local input_data = file:read("*all")
+file:close()
+print(input_data)

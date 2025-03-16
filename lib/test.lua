@@ -1,8 +1,10 @@
--- Read input from stdin line by line using io.lines()
-local function trim(s)
-    return s:match("^%s*(.-)%s*$")
-end
+local input = os.getenv("INPUT_DATA_FILE")
 
-o = io.read()
-print("Input data is: ", o)
-print("Hello, World!")
+local file = io.open(input, "r")
+if file then
+    local content = file:read("*all")
+    file:close()
+    print(content)
+else
+    print("Could not open file: " .. input)
+end

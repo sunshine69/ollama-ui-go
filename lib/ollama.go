@@ -283,7 +283,7 @@ func HandleOllamaChat(w http.ResponseWriter, r *http.Request) {
 				} else {
 					jsonin := u.JsonDumpByte(toolCall.Function.Arguments, "")
 					output, _ := RunLuaFile("lua-tools/"+toolCall.Function.Name+".lua", jsonin)
-					fmt.Fprint(w, output)
+					fmt.Fprint(w, string(output))
 				}
 			}
 		} else { // Non standard tools call - like gemma3; they give it in the response text
@@ -296,7 +296,7 @@ func HandleOllamaChat(w http.ResponseWriter, r *http.Request) {
 					} else {
 						jsonin := u.JsonDumpByte(toolCall.Function.Arguments, "")
 						output, _ := RunLuaFile("lua-tools/"+toolCall.Function.Name+".lua", jsonin)
-						fmt.Fprint(w, output)
+						fmt.Fprint(w, string(output))
 					}
 				}
 			} else {
@@ -333,6 +333,13 @@ func HandleOllamaGetModel(w http.ResponseWriter, r *http.Request) {
 }
 
 func RunLuaFile(luaFileName string, inputData []byte) ([]byte, error) {
+	// go 2.14.1 has a bug in os.CreateTemp() which crashes when we set the second args using fmt.Sprintf.
+	_tmpF, _ := os.CreateTemp("", "ollama-stdin-")
+	_tmpF.Write(inputData)
+	_tmpF.Close()
+	defer os.Remove(_tmpF.Name())
+	os.Setenv("INPUT_DATA_FILE", _tmpF.Name())
+
 	old := os.Stdout     // keep backup of the real stdout
 	oldStdin := os.Stdin // keep backup of the real stdin
 
@@ -346,9 +353,6 @@ func RunLuaFile(luaFileName string, inputData []byte) ([]byte, error) {
 	}()
 	os.Stdout = w
 
-	inR, inW, _ := os.Pipe()
-	os.Stdin = inR
-
 	L := lua.NewState()
 	defer L.Close()
 	L.PreloadModule("re", gluare.Loader)
@@ -356,17 +360,7 @@ func RunLuaFile(luaFileName string, inputData []byte) ([]byte, error) {
 	L.PreloadModule("yaml", gluayaml.Loader)
 	L.PreloadModule("json", gopherjson.Loader)
 
-	// Write input data to stdin
-	byteCount, err := inW.Write(inputData)
-	if err != nil {
-		os.Stdout = old
-		os.Stdin = oldStdin
-		fmt.Println("Failed to write to stdin", err.Error())
-		return nil, err
-	}
-	inW.Close()
-
-	err = L.DoFile(luaFileName)
+	err := L.DoFile(luaFileName)
 	if err != nil {
 		return nil, err
 	}
@@ -374,7 +368,7 @@ func RunLuaFile(luaFileName string, inputData []byte) ([]byte, error) {
 	w.Close()
 	os.Stdout = old
 	os.Stdin = oldStdin
-	fmt.Println("byteCount: ", byteCount)
+	// fmt.Println("byteCount: ", byteCount)
 	out := <-outC
 	return out, nil
 }
