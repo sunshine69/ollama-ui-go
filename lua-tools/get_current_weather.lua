@@ -3,7 +3,11 @@ local ollama_host = os.getenv("OLLAMA_HOST")
 local file = io.open(input_data_file, "r")
 local input_data = file:read("*all")
 file:close()
--- args = decode(input_data)
+local success, decoded_args = pcall(decode, input_data)
+if not success then
+    print("Error json decoding: " .. tostring(input_data))
+else
+    print("Decoded: " .. decoded_args)
+end
 print(ollama_host)
-print(input_data)
-print(args)
+print(decoded_args)
