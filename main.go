@@ -47,7 +47,7 @@ func main() {
 	http.HandleFunc(path_base+"/", func(w http.ResponseWriter, r *http.Request) {
 		preferred_models := os.Getenv("PREFERRED_MODELS")
 		if preferred_models == "" {
-			preferred_models = `["mistral-small:24b-instruct-2501-q4_K_M", "huihui_ai/qwen2.5-coder-abliterate:7b-instruct-q4_K_M" ,"phi4:latest", "gemma3:4b"]`
+			preferred_models = `["qwen2.5-coder:32b", "gemma3-12b:custom", "qwq:32b-q4_K_M", "huihui_ai/qwen2.5-coder-abliterate:14b-instruct-q4_K_M", "huihui_ai/phi4-abliterated:latest"]`
 		}
 		if r.URL.Path == path_base+"/" {
 			t.ExecuteTemplate(w, "index.html", map[string]any{"path_base": path_base, "preferred_models": preferred_models})

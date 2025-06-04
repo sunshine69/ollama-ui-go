@@ -197,10 +197,10 @@ func ParseToolCalls(inputString string) (toolfFunctions any, err error) {
 	}
 	parsed := [][]string{}
 	for _, ptn := range parse_res_regex {
-		fmt.Println("[DEBUG] input string: ", inputString)
+		// fmt.Println("[DEBUG] input string: ", inputString)
 		parsed = ptn.FindAllStringSubmatch(inputString, -1)
 		if len(parsed) > 0 {
-			fmt.Println("[DEBUG] parsed: ", parsed)
+			// fmt.Println("[DEBUG] parsed: ", parsed)
 			break
 		}
 	}
@@ -208,7 +208,7 @@ func ParseToolCalls(inputString string) (toolfFunctions any, err error) {
 		return toolfFunctions, fmt.Errorf("failed to parse tool calls")
 	}
 	data := parsed[0][1]
-	fmt.Fprintf(os.Stderr, "[DEBUG] data: %s\n", data)
+	// fmt.Fprintf(os.Stderr, "[DEBUG] data: %s\n", data)
 	err = json.Unmarshal([]byte(data), &toolfFunctions)
 	if err != nil { // Non standard tools call - like gemma3; they give it in the response text
 		ptn := regexp.MustCompile(`(?s)(?:print\()?([a-zA-Z_][a-zA-Z0-9_]*)\((.*?)\)\)?`)

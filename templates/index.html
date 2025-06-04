@@ -217,6 +217,30 @@
             document.getElementById('result').innerHTML = '';
         }
 
+        function sortByReferenceArray(o1, s1) {
+            // Create a map for quick lookup of indices in s1
+            const indexMap = new Map(s1.map((name, index) => [name, index]));
+
+            return o1.slice().sort((a, b) => {
+                const indexA = indexMap.get(a.name);
+                const indexB = indexMap.get(b.name);
+
+                if (indexA === undefined && indexB === undefined) {
+                    // Both names are not in s1, maintain original order
+                    return 0;
+                } else if (indexA === undefined) {
+                    // Only a's name is not in s1, b should come first
+                    return 1;
+                } else if (indexB === undefined) {
+                    // Only b's name is not in s1, a should come first
+                    return -1;
+                } else {
+                    // Both names are in s1, sort by their indices
+                    return indexA - indexB;
+                }
+            });
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             const savedSettings = localStorage.getItem('ollamaSettings');
             if (savedSettings) {
@@ -249,9 +273,7 @@
                 .then(data => {
                     const select = document.getElementById('model_name');
                     if (preferredModels.length > 0) {
-                        data.models.sort((a, b) => {
-                            return preferredModels.indexOf(b.name) - preferredModels.indexOf(a.name);
-                        });
+                        data.models = sortByReferenceArray(data.models, preferredModels);
                     }
                     data.models.forEach(model => {
                         const option = document.createElement('option');
@@ -309,7 +331,7 @@
                 }
             }
             bodyPayload['stream'] = stream;
-
+            var modelResponse = "";
             fetch('{{.path_base}}/ollama/ask', {
                 method: 'POST',
                 headers: {
@@ -321,7 +343,6 @@
             .then(response => {
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
-                let buf = '';
                 resultDiv.innerHTML += "\n===== Model: " + model + " =====\n";
                 function readStream() {
                     reader.read().then(({ done, value }) => {
@@ -330,15 +351,16 @@
                             document.getElementById('loading').style.display = 'none';
                             submitButton.textContent = 'Submit'
                             resultDiv.innerHTML += "\n\nTook "+elapsedSeconds+" secs to answer\n=========================================\n";
+                            messages.push({role: "assistant", content: modelResponse});
                             return;
                         }
                         const text = decoder.decode(value, { stream: true });
 
                         resultDiv.innerHTML += text;
+                        modelResponse += text;
                         if (enableAutoScroll) {
                             resultDiv.scrollTop = resultDiv.scrollHeight;
                         }
-
                         readStream();
                     }).catch(error => {
                         clearInterval(loadingInterval);
