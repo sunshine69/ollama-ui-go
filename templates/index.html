@@ -125,11 +125,14 @@
         var messages = [];
         var imageFileContent = [];
         var formatField = "";
-        var optionsField = "";
+        var optionsField = "{}";
         var enableAutoScroll = true;
         var stream = true;
         var controller = new AbortController();
         var keep_alive = "5m";
+        var preferredModelsStr = {{ .preferred_models }};
+        var preferredModels = JSON.parse(preferredModelsStr);
+        var allOptions = {};
 
         // Save settings to localStorage
         function saveSettings() {
@@ -214,28 +217,64 @@
             document.getElementById('result').innerHTML = '';
         }
 
+        function sortByReferenceArray(o1, s1) {
+            // Create a map for quick lookup of indices in s1
+            const indexMap = new Map(s1.map((name, index) => [name, index]));
+
+            return o1.slice().sort((a, b) => {
+                const indexA = indexMap.get(a.name);
+                const indexB = indexMap.get(b.name);
+
+                if (indexA === undefined && indexB === undefined) {
+                    // Both names are not in s1, maintain original order
+                    return 0;
+                } else if (indexA === undefined) {
+                    // Only a's name is not in s1, b should come first
+                    return 1;
+                } else if (indexB === undefined) {
+                    // Only b's name is not in s1, a should come first
+                    return -1;
+                } else {
+                    // Both names are in s1, sort by their indices
+                    return indexA - indexB;
+                }
+            });
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             const savedSettings = localStorage.getItem('ollamaSettings');
             if (savedSettings) {
-            const settings = JSON.parse(savedSettings);
-            if (settings.formatField) {
-                formatField = settings.formatField;
-                document.getElementById('textInputBox').value = settings.formatField;
-            }
-            if (settings.optionsField) {
-                optionsField = settings.optionsField;
-                document.getElementById('textOptionsBox').value = settings.optionsField;
-            }
-            if (settings.enableMarkdownConversion !== undefined) {
-                enableMarkdownConversion = settings.enableMarkdownConversion;
-                document.getElementById('rawDisplay').checked = !enableMarkdownConversion;
+                console.log("savedSettings", savedSettings);
+                const settings = JSON.parse(savedSettings);
+                if (settings.optionsField.length > 0) {
+                    allOptions = JSON.parse(settings.optionsField);
+                }
+                if (settings.formatField) {
+                    formatField = settings.formatField;
+                    document.getElementById('textInputBox').value = settings.formatField;
+                }
+                if (settings.optionsField) {
+                    optionsField = settings.optionsField;
+                    document.getElementById('textOptionsBox').value = settings.optionsField;
+                }
+                if (settings.enableMarkdownConversion !== undefined) {
+                    enableMarkdownConversion = settings.enableMarkdownConversion;
+                    document.getElementById('rawDisplay').checked = !enableMarkdownConversion;
 
+                }
+                if (allOptions.hasOwnProperty('preferred_models')) {
+                    console.log("preferred_models", allOptions.preferred_models);
+                    preferredModels = allOptions.preferred_models;
+                }
             }
-            }
+            console.log("preferredModels", preferredModels);
             fetch('{{.path_base}}/ollama/models')
                 .then(response => response.json())
                 .then(data => {
                     const select = document.getElementById('model_name');
+                    if (preferredModels.length > 0) {
+                        data.models = sortByReferenceArray(data.models, preferredModels);
+                    }
                     data.models.forEach(model => {
                         const option = document.createElement('option');
                         option.value = model.name;
@@ -278,7 +317,6 @@
                 bodyPayload['format'] = JSON.parse(formatField);
             }
             if (optionsField.length > 0) {
-                allOptions = JSON.parse(optionsField);
                 if (allOptions.hasOwnProperty('options')) {
                     bodyPayload['options'] = allOptions.options;
                 }
@@ -288,9 +326,12 @@
                 if (allOptions.hasOwnProperty('tools')) {
                     bodyPayload['tools'] = allOptions.tools;
                 }
+                if (allOptions.hasOwnProperty('preferred_models')) {
+                    preferredModels = allOptions.preferred_models;
+                }
             }
             bodyPayload['stream'] = stream;
-
+            var modelResponse = "";
             fetch('{{.path_base}}/ollama/ask', {
                 method: 'POST',
                 headers: {
@@ -302,7 +343,6 @@
             .then(response => {
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
-                let buf = '';
                 resultDiv.innerHTML += "\n===== Model: " + model + " =====\n";
                 function readStream() {
                     reader.read().then(({ done, value }) => {
@@ -311,15 +351,16 @@
                             document.getElementById('loading').style.display = 'none';
                             submitButton.textContent = 'Submit'
                             resultDiv.innerHTML += "\n\nTook "+elapsedSeconds+" secs to answer\n=========================================\n";
+                            messages.push({role: "assistant", content: modelResponse});
                             return;
                         }
                         const text = decoder.decode(value, { stream: true });
 
                         resultDiv.innerHTML += text;
+                        modelResponse += text;
                         if (enableAutoScroll) {
                             resultDiv.scrollTop = resultDiv.scrollHeight;
                         }
-
                         readStream();
                     }).catch(error => {
                         clearInterval(loadingInterval);

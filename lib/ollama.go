@@ -1,6 +1,7 @@
 package lib
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/json"
@@ -9,26 +10,19 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"plugin"
+	"regexp"
 	"strings"
 
+	"github.com/cjoudrey/gluahttp"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/kohkimakimoto/gluayaml"
 	"github.com/ollama/ollama/api"
+	"github.com/sunshine69/gluare"
+
+	u "github.com/sunshine69/golang-tools/utils"
+	gopherjson "github.com/sunshine69/gopher-json"
+	lua "github.com/yuin/gopher-lua"
 )
-
-var ToolsPlugin *plugin.Plugin
-
-func init() {
-	if _, err := os.Stat("ai-tools.so"); os.IsNotExist(err) {
-		fmt.Println("ai-tools.so not found")
-	} else {
-		if ToolsPlugin, err = plugin.Open("ai-tools.so"); err != nil {
-			fmt.Println("Failed to load plugin", err)
-		} else {
-			fmt.Println("Plugin loaded")
-		}
-	}
-}
 
 type AIMessage struct {
 	Role    string `json:"role"`
@@ -195,21 +189,40 @@ type ToolFunctionResponse struct {
 	} `json:"function"`
 }
 
-func ParseToolCalls(inputString string) (toolfFunctions []ToolFunctionResponse, err error) {
+func ParseToolCalls(inputString string) (toolfFunctions any, err error) {
 	// Find the start and end indices of the string_data part.
-	start := strings.Index(inputString, "<|tool_call|>")
-	if start == -1 {
-		return toolfFunctions, fmt.Errorf("tool_call tag not found")
+	parse_res_regex := []*regexp.Regexp{
+		regexp.MustCompile(`(?s)\<\|tool_call\|\>(.*?)\<\|\/tool_call\|\>`),
+		regexp.MustCompile("(?s)```tool[^\\s]*\n(.*?)\n```"),
 	}
-	end := strings.Index(inputString, "<|/tool_call|>")
-	if end == -1 {
-		return toolfFunctions, fmt.Errorf("/tool_call/ tag not found")
+	parsed := [][]string{}
+	for _, ptn := range parse_res_regex {
+		// fmt.Println("[DEBUG] input string: ", inputString)
+		parsed = ptn.FindAllStringSubmatch(inputString, -1)
+		if len(parsed) > 0 {
+			// fmt.Println("[DEBUG] parsed: ", parsed)
+			break
+		}
 	}
-
-	// Extract the string_data part.
-	data := inputString[start+len("<|tool_call|>") : end]
-	fmt.Fprintf(os.Stderr, "[DEBUG] data: %s\n", data)
+	if len(parsed) == 0 {
+		return toolfFunctions, fmt.Errorf("failed to parse tool calls")
+	}
+	data := parsed[0][1]
+	// fmt.Fprintf(os.Stderr, "[DEBUG] data: %s\n", data)
 	err = json.Unmarshal([]byte(data), &toolfFunctions)
+	if err != nil { // Non standard tools call - like gemma3; they give it in the response text
+		ptn := regexp.MustCompile(`(?s)(?:print\()?([a-zA-Z_][a-zA-Z0-9_]*)\((.*?)\)\)?`)
+		matches := ptn.FindAllStringSubmatch(data, -1)
+		if len(matches) == 0 {
+			return toolfFunctions, fmt.Errorf("failed to parse tool calls")
+		}
+		if len(matches[0]) != 3 {
+			return toolfFunctions, fmt.Errorf("failed to parse tool calls")
+		}
+		o := map[string]string{"func_name": matches[0][1], "args_json": matches[0][2]}
+		fmt.Println("[DEBUG] output: ", o)
+		return o, nil
+	}
 	return toolfFunctions, err
 }
 
@@ -279,36 +292,52 @@ func HandleOllamaChat(w http.ResponseWriter, r *http.Request) {
 	ctx1, cancel := context.WithCancel(ctx)
 	defer cancel()
 	respFunc := func(resp api.ChatResponse) error {
-		// Not sure why resp.Message.ToolCalls isd always empty list. ollama bug?
-		// The response Message Content is in the format <|tool_call|>content<|tool_call|> where content is a json which ahs the AI response. We need to parse this and make a decision on how to handle it.
-		if len(resp.Message.ToolCalls) > 0 { // yeah some model support it. Might be ollama does not understand other model tags
+		// Standard ollama support tools call
+		if len(resp.Message.ToolCalls) > 0 {
 			for _, toolCall := range resp.Message.ToolCalls {
 				fmt.Fprintf(os.Stderr, "[DEBUG] func name: %s Args: %s\n", toolCall.Function.Name, toolCall.Function.Arguments.String())
-				if f, err := ToolsPlugin.Lookup(toolCall.Function.Name); err == nil {
-					output := f.(func(...string) string)(FlattenArgument(toolCall.Function.Arguments)...)
-					fmt.Fprint(w, output)
-				} else {
-					fmt.Println("Failed to lookup function", err)
+				if _, err := os.Stat("lua-tools/" + toolCall.Function.Name + ".lua"); os.IsNotExist(err) {
+					fmt.Println("Failed to lookup lua file", err)
 					fmt.Fprint(w, resp.Message.Content)
+				} else {
+					jsonin := u.JsonDumpByte(toolCall.Function.Arguments, "")
+					output, _ := RunLuaFile("lua-tools/"+toolCall.Function.Name+".lua", jsonin)
+					fmt.Fprint(w, string(output))
 				}
 			}
-		} else {
-			if toolsFuncs, err := ParseToolCalls(resp.Message.Content); err == nil {
-				if ToolsPlugin == nil {
-					fmt.Fprint(w, resp.Message.Content)
-				} else {
-					fmt.Fprintf(os.Stderr, "\n\n*****\n[DEBUG] TOOL_FUNC %q\n", toolsFuncs)
-					toolFunc := toolsFuncs[0].Function
-					fmt.Fprintf(os.Stderr, "\n\n*****\n[DEBUG] FUNC_NAME %s\n", toolFunc.Name)
-					if f, err := ToolsPlugin.Lookup(toolFunc.Name); err == nil {
-						output := f.(func(...string) string)(FlattenArgument(toolFunc.Arguments)...)
-						fmt.Fprint(w, output)
-					} else {
-						fmt.Println("Failed to lookup function", err)
-						fmt.Fprint(w, resp.Message.Content)
+		} else { // Non standard tools call - like gemma3; they give it in the response text
+			// And phi4-mini generating wrong json, put the last } in wrong place! We actually tweaked the SYSTEM prompt to make it works better thus it wont fall into this case
+			if toolsFuncsAny, err := ParseToolCalls(resp.Message.Content); err == nil {
+				if toolsFuncs, ok := toolsFuncsAny.([]ToolFunctionResponse); ok {
+					for _, toolCall := range toolsFuncs {
+						fmt.Fprintf(os.Stderr, "[DEBUG] func name: %s Args: %s\n", toolCall.Function.Name, toolCall.Function.Arguments)
+						if _, err := os.Stat("lua-tools/" + toolCall.Function.Name + ".lua"); os.IsNotExist(err) {
+							fmt.Fprintln(os.Stderr, "Failed to lookup lua file", err)
+							fmt.Fprint(w, resp.Message.Content)
+						} else {
+							jsonin := u.JsonDumpByte(toolCall.Function.Arguments, "")
+							output, _ := RunLuaFile("lua-tools/"+toolCall.Function.Name+".lua", jsonin)
+							fmt.Fprint(w, string(output))
+						}
+					}
+				} else { // We just a string. Need to process it suitable before calling lua script. This is gemma3 case
+					if toolcall, ok := toolsFuncsAny.(map[string]string); ok {
+						if _, err := os.Stat("lua-tools/" + toolcall["func_name"] + ".lua"); os.IsNotExist(err) {
+							fmt.Fprintln(os.Stderr, "Failed to lookup lua file", err)
+							fmt.Fprint(w, resp.Message.Content)
+						} else {
+							output, err := RunLuaFile("lua-tools/"+toolcall["func_name"]+".lua", []byte(toolcall["args_json"]))
+							if err != nil {
+								fmt.Fprintln(os.Stderr, "Failed to run lua file", err)
+								fmt.Fprint(w, resp.Message.Content)
+							} else {
+								fmt.Fprint(w, string(output))
+							}
+						}
 					}
 				}
 			} else {
+				// fmt.Fprintln(os.Stderr, "Failed to parse tool calls "+err.Error())
 				_, err := fmt.Fprint(w, resp.Message.Content)
 				if err != nil {
 					cancel()
@@ -338,4 +367,44 @@ func HandleOllamaGetModel(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(modelInfo)
+}
+
+func RunLuaFile(luaFileName string, inputData []byte) ([]byte, error) {
+	// go 2.14.1 has a bug in os.CreateTemp() which crashes when we set the second args using fmt.Sprintf.
+	_tmpF, _ := os.CreateTemp("", "ollama-stdin-*.json")
+	_tmpF.Write(inputData)
+	_tmpF.Close()
+	defer os.Remove(_tmpF.Name())
+	os.Setenv("INPUT_DATA_FILE", _tmpF.Name())
+	old := os.Stdout     // keep backup of the real stdout
+	oldStdin := os.Stdin // keep backup of the real stdin
+
+	r, w, _ := os.Pipe()
+	outC := make(chan []byte)
+	// copy the output in a separate goroutine so printing can't block indefinitely
+	go func() {
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		outC <- buf.Bytes()
+	}()
+	os.Stdout = w
+
+	L := lua.NewState()
+	defer L.Close()
+	L.PreloadModule("re", gluare.Loader)
+	L.PreloadModule("http", gluahttp.NewHttpModule(&http.Client{}).Loader)
+	L.PreloadModule("yaml", gluayaml.Loader)
+	L.PreloadModule("json", gopherjson.Loader)
+
+	err := L.DoFile(luaFileName)
+	if err != nil {
+		return nil, err
+	}
+
+	w.Close()
+	os.Stdout = old
+	os.Stdin = oldStdin
+	// fmt.Println("byteCount: ", byteCount)
+	out := <-outC
+	return out, nil
 }
